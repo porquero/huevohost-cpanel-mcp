@@ -42,7 +42,7 @@ El paquete `cpanel-api` se instala como dependencia de desarrollo y se usa solo 
 | `AUDIT_LOG_PATH` | No | Ruta de auditoría. Por defecto `%LOCALAPPDATA%\Huevohost\cpanel-mcp\audit.jsonl` en Windows. |
 | `ALLOWED_ACTIONS_PATH` | No | Ruta de `allowed_actions.json`. Por defecto el archivo del proyecto. |
 | `MCP_FILE_MAX_BYTES` | No | Tamaño máximo por archivo para crear, subir o descargar. Por defecto `1048576` (1 MiB); mínimo `1024`, máximo `10485760`. |
-| `MCP_LOCAL_UPLOAD_DIRS` | No | Carpetas locales desde las que `upload_local_file` puede leer archivos, separadas por `;` en Windows y `:` en Linux/macOS (rutas absolutas). Por defecto, `Descargas` del usuario. |
+| `MCP_LOCAL_UPLOAD_DIRS` | No | Carpetas locales desde las que `upload_local_file` puede leer archivos, separadas por `;` en Windows y `:` en Linux/macOS (rutas absolutas). La **primera** es la bandeja: por defecto la carpeta `archivos/` junto al proyecto. |
 | `CPANEL_MCP_LOG_LEVEL` | No | `DEBUG`, `INFO`, `WARNING`, `ERROR` o `CRITICAL`; por defecto `WARNING`. Los logs van a stderr. |
 
 Configura las credenciales en las variables de usuario del sistema, no en el repositorio. `.env` está ignorado por Git y el servidor no lo carga automáticamente.
@@ -63,6 +63,7 @@ Configura las credenciales en las variables de usuario del sistema, no en el rep
     { "name": "download_file", "level": "lectura", "enabled": true },
     { "name": "create_file", "level": "escritura_reversible", "enabled": true },
     { "name": "upload_file", "level": "escritura_reversible", "enabled": true },
+    { "name": "list_local_files", "level": "lectura", "enabled": true },
     { "name": "upload_local_file", "level": "escritura_reversible", "enabled": true },
     { "name": "delete_file", "level": "alto_impacto", "enabled": true },
     { "name": "publish_landing_page", "level": "alto_impacto", "enabled": false }
@@ -140,20 +141,26 @@ Aplica el mismo límite de tamaño, la misma política de extensiones bloqueadas
 
 **`content_base64` solo es fiable hasta ~5 KB**: el modelo tiene que escribir los bytes en su respuesta y, por encima de ese tamaño, el base64 suele llegar corrupto. Para fotos, logos, PDFs y fuentes usa `upload_local_file`.
 
+### `list_local_files()`
+
+Solo lectura. Devuelve la ruta de la bandeja (`archivos/`) y los archivos que hay dentro (nombre, tamaño y si el tipo se puede subir), hasta 3 niveles de subcarpetas. No sigue enlaces simbólicos ni muestra archivos ocultos. Sirve para que Claude conozca la carpeta y vea qué puede subir.
+
 ### `upload_local_file(local_path, path, overwrite=false)`
 
-Lee un archivo del **equipo del usuario** y lo sube a `/public_html` con `Fileman::upload_files` (multipart). El modelo solo pasa rutas; los bytes nunca viajan en la conversación, así que no hay límite práctico de tamaño más allá de `MCP_FILE_MAX_BYTES`.
+Lee un archivo del **equipo del usuario** y lo sube a `/public_html` con `Fileman::upload_files` (multipart). El modelo solo pasa nombres y rutas; los bytes nunca viajan en la conversación, así que no hay límite práctico de tamaño más allá de `MCP_FILE_MAX_BYTES`.
 
-- `local_path`: ruta **absoluta** del archivo local, por ejemplo `C:\Users\ana\Downloads\logo.png`. Debe estar dentro de una carpeta de `MCP_LOCAL_UPLOAD_DIRS` (por defecto `Descargas`). Se rechazan `..`, enlaces simbólicos, carpetas y cualquier ruta fuera de la allowlist.
+**Flujo para el usuario:** copia los archivos que quiere subir a la carpeta `archivos/` (en el directorio del proyecto del MCP) y le pide a Claude, por ejemplo: «Sube `logo.png` a `sitio.example.com/img/logo.png`».
+
+- `local_path`: el **nombre del archivo dentro de `archivos/`** (`logo.png`, o `clientes/logo.png` si usas subcarpetas). También se acepta una ruta absoluta, pero solo dentro de una carpeta de `MCP_LOCAL_UPLOAD_DIRS`. Se rechazan `..`, enlaces simbólicos, carpetas y cualquier ruta fuera de la allowlist.
 - `path`: destino relativo a `/public_html`; su extensión decide el tipo esperado y no tiene por qué coincidir con el nombre local.
 - Tipos permitidos: jpg, jpeg, png, webp, gif, ico, pdf, woff, woff2, ttf, otf. El contenido real (magic bytes) debe coincidir con la extensión de destino. SVG, ejecutables, `.htaccess` y dobles extensiones (`foto.php.jpg`) se rechazan.
 - Respeta `MCP_FILE_MAX_BYTES` (1 MiB por defecto, máximo 10 MiB: súbelo si necesitas fotos más grandes).
 - Si el destino existe y `overwrite=true`, el original va antes a la papelera de cPanel.
-- Devuelve `bytes`, `sha256`, `mime` y `verified`. No devuelve la ruta local completa, solo el nombre del archivo.
+- Devuelve `bytes`, `sha256`, `mime` y `verified`. No devuelve la ruta local, solo el nombre del archivo.
 
-Ejemplo: «Sube `C:\Users\ana\Downloads\logo.png` a `sitio.example.com/img/logo.png`».
+**Archivos adjuntos al chat.** Un archivo que el usuario adjunta en la conversación vive en el entorno del chat (por ejemplo `/mnt/user-data/uploads/...`), no en el disco del usuario, y este servidor no puede leerlo; las rutas de ese tipo se rechazan con un mensaje que lo explica. Claude puede moverlo a `archivos/` solo si dispone de herramientas de archivos sobre el equipo del usuario (por ejemplo en Claude Code o Cowork). En el chat de Claude Desktop sin esas herramientas, el usuario debe copiar él mismo el archivo a `archivos/`.
 
-**Riesgo a tener en cuenta:** la herramienta puede publicar en la web cualquier archivo permitido de las carpetas configuradas. Por eso la allowlist por defecto es solo `Descargas`; no añadas carpetas con documentos privados (p. ej. `Documentos`) a `MCP_LOCAL_UPLOAD_DIRS`.
+**Riesgo a tener en cuenta:** la herramienta puede publicar en la web cualquier archivo permitido de las carpetas configuradas. Por eso la allowlist por defecto es solo `archivos/`; no añadas carpetas con documentos privados (p. ej. `Documentos`) a `MCP_LOCAL_UPLOAD_DIRS`. El contenido de `archivos/` no se versiona en Git (solo `.gitkeep`).
 
 ### `delete_file(path, confirm)`
 

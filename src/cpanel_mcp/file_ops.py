@@ -662,6 +662,42 @@ class FileOperations:
             )
         return result
 
+    async def list_local_files(self) -> dict[str, Any]:
+        """Lista la bandeja local (primera carpeta de MCP_LOCAL_UPLOAD_DIRS)."""
+
+        from .binary_types import ALLOWED_BINARY_EXTENSIONS
+        from .local_files import list_inbox
+
+        if not self.local_upload_dirs:
+            raise UnsafePathError(
+                "No hay carpetas locales permitidas. Define MCP_LOCAL_UPLOAD_DIRS."
+            )
+        inbox = self.local_upload_dirs[0]
+        if not inbox.is_dir():
+            return {
+                "folder": str(inbox),
+                "exists": False,
+                "count": 0,
+                "files": [],
+                "message": (
+                    f"La carpeta {inbox} no existe. Créala y pide al usuario "
+                    "que copie ahí los archivos que quiere subir."
+                ),
+            }
+        files = await asyncio.to_thread(
+            list_inbox, inbox, tuple(ALLOWED_BINARY_EXTENSIONS)
+        )
+        return {
+            "folder": str(inbox),
+            "exists": True,
+            "count": len(files),
+            "files": files,
+            "message": (
+                "Para subir uno, llama a upload_local_file con local_path igual "
+                "al nombre que aparece en 'name'."
+            ),
+        }
+
     async def upload_local_file(
         self,
         local_path: str,

@@ -36,8 +36,12 @@ INSTRUCTIONS = (
     "Las herramientas de archivos trabajan únicamente dentro de /public_html. "
     "No siguen enlaces simbólicos, no aceptan rutas con '..' y no permiten escribir "
     "archivos ejecutables como .php, .cgi o .htaccess. Para subir binarios (fotos, "
-    "logos, PDFs, fuentes) usa upload_local_file con la ruta del archivo en el "
-    "equipo del usuario; no pases base64 largo por upload_file. delete_file mueve a la "
+    "logos, PDFs, fuentes) usa upload_local_file con el nombre del archivo dentro "
+    "de la carpeta 'archivos' del equipo del usuario (list_local_files "
+    "muestra su ruta y contenido). Los adjuntos del chat no son visibles "
+    "para este servidor: pide al usuario que copie el archivo a esa "
+    "carpeta, o cópialo tú si tienes herramientas de archivos locales. "
+    "No pases base64 largo por upload_file. delete_file mueve a la "
     "papelera de cPanel y exige confirmar la ruta exacta. No existen herramientas "
     "de cambio de contraseñas, bases de datos, DNS ni SSL."
 )
@@ -56,6 +60,7 @@ def _implemented_handlers(
         "download_file": file_operations.download_file,
         "create_file": file_operations.create_file,
         "upload_file": file_operations.upload_file,
+        "list_local_files": file_operations.list_local_files,
         "upload_local_file": file_operations.upload_local_file,
         "delete_file": file_operations.delete_file,
     }

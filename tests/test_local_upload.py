@@ -90,13 +90,103 @@ async def test_subfolders_of_allowed_dir_are_allowed(downloads: Path) -> None:
 
 @pytest.mark.parametrize(
     "bad",
-    ["", "   ", "logo.png", "Downloads/logo.png", "C:\\x\\..\\y.png", "/a/\x00b.png"],
+    ["", "   ", "C:\\x\\..\\y.png", "/a/\x00b.png", "../logo.png", "sub/../../x.png"],
 )
 async def test_invalid_local_paths(downloads: Path, bad: str) -> None:
     client = site_client()
     with pytest.raises((ValidationError, UnsafePathError)):
         await make_ops(client, downloads).upload_local_file(bad, "site/logo.png")
     assert not [c for c in client.calls if c[0] == "upload_file"]
+
+
+async def test_bare_name_resolves_inside_the_inbox(downloads: Path) -> None:
+    (downloads / "foto_1.jpg").write_bytes(JPEG)
+    (downloads / "cliente").mkdir()
+    (downloads / "cliente" / "logo.png").write_bytes(PNG)
+    client = site_client()
+    ops = make_ops(client, downloads)
+
+    first = await ops.upload_local_file("foto_1.jpg", "site/foto.jpg")
+    second = await ops.upload_local_file("cliente/logo.png", "site/logo.png")
+
+    assert first["sha256"] == hashlib.sha256(JPEG).hexdigest()
+    assert second["mime"] == "image/png"
+    assert client.files["public_html/site/foto.jpg"] == JPEG
+
+
+async def test_bare_name_only_resolves_in_first_dir(
+    downloads: Path, tmp_path: Path
+) -> None:
+    other = tmp_path / "otra"
+    other.mkdir()
+    (other / "x.png").write_bytes(PNG)
+    settings = Settings(
+        host="cpanel.test",
+        user="tester",
+        token="TOKEN-SECRETO-123",
+        local_upload_dirs=(downloads, other),
+    )
+    client = site_client()
+    ops = FileOperations(client, settings)  # type: ignore[arg-type]
+    with pytest.raises(FileOperationError, match="no existe"):
+        await ops.upload_local_file("x.png", "site/x.png")
+    await ops.upload_local_file(str(other / "x.png"), "site/x.png")
+    assert "public_html/site/x.png" in client.files
+
+
+async def test_missing_bare_name_explains_where_to_put_it(downloads: Path) -> None:
+    with pytest.raises(FileOperationError, match="Copia el archivo a la carpeta"):
+        await make_ops(site_client(), downloads).upload_local_file(
+            "no_esta.png", "site/a.png"
+        )
+
+
+@pytest.mark.parametrize("foreign", ["/mnt/user-data/uploads/foto_1.jpg", "\\raiz\\foto.jpg"])
+async def test_chat_sandbox_paths_are_rejected_with_a_hint(
+    downloads: Path, foreign: str
+) -> None:
+    client = site_client()
+    with pytest.raises(UnsafePathError, match="adjuntos"):
+        await make_ops(client, downloads).upload_local_file(foreign, "site/a.jpg")
+    assert client.files == {}
+
+
+async def test_list_local_files(downloads: Path) -> None:
+    (downloads / "logo.png").write_bytes(PNG)
+    (downloads / "notas.txt").write_text("hola")
+    (downloads / ".gitkeep").write_text("")
+    (downloads / "cliente").mkdir()
+    (downloads / "cliente" / "foto.JPG").write_bytes(JPEG)
+    ops = make_ops(site_client(), downloads)
+
+    result = await ops.list_local_files()
+
+    assert result["exists"] is True
+    assert result["folder"] == str(downloads)
+    by_name = {item["name"]: item for item in result["files"]}
+    assert set(by_name) == {"logo.png", "notas.txt", "cliente/foto.JPG"}
+    assert by_name["logo.png"]["uploadable"] is True
+    assert by_name["logo.png"]["size"] == len(PNG)
+    assert by_name["cliente/foto.JPG"]["uploadable"] is True
+    assert by_name["notas.txt"]["uploadable"] is False
+
+
+async def test_list_local_files_skips_symlinks(downloads: Path, tmp_path: Path) -> None:
+    private = tmp_path / "privado.png"
+    private.write_bytes(PNG)
+    try:
+        (downloads / "enlace.png").symlink_to(private)
+    except (OSError, NotImplementedError):
+        pytest.skip("no se pueden crear enlaces simbólicos en este sistema")
+    result = await make_ops(site_client(), downloads).list_local_files()
+    assert result["files"] == []
+
+
+async def test_list_local_files_when_folder_is_missing(tmp_path: Path) -> None:
+    ops = make_ops(site_client(), tmp_path / "no_existe")
+    result = await ops.list_local_files()
+    assert result["exists"] is False and result["files"] == []
+    assert "no existe" in result["message"]
 
 
 async def test_dotdot_cannot_escape_allowed_dir(downloads: Path, tmp_path: Path) -> None:
@@ -278,6 +368,7 @@ async def test_tool_registered_with_schema_and_audited_without_content(
     schema = tools["upload_local_file"].inputSchema
     assert set(schema["required"]) == {"local_path", "path"}
     assert schema["properties"]["overwrite"]["default"] is False
+    assert "list_local_files" in tools
     assert "upload_local_file" in tools["upload_file"].description
     assert "5 KB" in tools["upload_file"].description
 
@@ -313,7 +404,8 @@ async def test_tool_is_not_registered_when_disabled(
 
 def test_local_upload_dirs_config(tmp_path: Path) -> None:
     base = {"CPANEL_HOST": "cpanel.test", "CPANEL_USER": "u", "CPANEL_TOKEN": "t"}
-    assert load_settings(base).local_upload_dirs == (Path.home() / "Downloads",)
+    default_dirs = load_settings(base).local_upload_dirs
+    assert len(default_dirs) == 1 and default_dirs[0].name == "archivos"
 
     first, second = tmp_path / "a", tmp_path / "b"
     configured = load_settings(

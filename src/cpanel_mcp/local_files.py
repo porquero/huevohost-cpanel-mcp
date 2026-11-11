@@ -37,11 +37,6 @@ def resolve_local_file(value: object, allowed_dirs: Sequence[Path]) -> Path:
         raise UnsafePathError("local_path contiene caracteres de control.")
 
     candidate = Path(os.path.expanduser(raw))
-    if not candidate.is_absolute():
-        raise UnsafePathError(
-            "local_path debe ser una ruta absoluta (por ejemplo "
-            "C:\\Users\\tu_usuario\\Downloads\\logo.png)."
-        )
     if ".." in candidate.parts:
         raise UnsafePathError("local_path no puede contener '..'.")
 
@@ -49,6 +44,19 @@ def resolve_local_file(value: object, allowed_dirs: Sequence[Path]) -> Path:
         raise UnsafePathError(
             "No hay carpetas locales permitidas. Define MCP_LOCAL_UPLOAD_DIRS."
         )
+
+    inbox = allowed_dirs[0]
+    relative_name = not candidate.is_absolute()
+    if relative_name:
+        if candidate.drive or candidate.root:
+            raise UnsafePathError(
+                f"'{raw}' no es una ruta de este equipo (parece de otro "
+                "entorno, por ejemplo el sandbox del chat). Los archivos "
+                "adjuntos al chat no son accesibles desde aquí: copia el "
+                f"archivo a la carpeta {inbox} y pasa solo su nombre."
+            )
+        # Un nombre o subruta relativa se interpreta dentro de la bandeja.
+        candidate = inbox / candidate
 
     normalized = _norm(candidate)
     root: Path | None = None
@@ -61,8 +69,9 @@ def resolve_local_file(value: object, allowed_dirs: Sequence[Path]) -> Path:
         shown = ", ".join(str(item) for item in allowed_dirs)
         raise UnsafePathError(
             "Por seguridad solo se pueden subir archivos de estas carpetas "
-            f"locales: {shown}. Copia el archivo a una de ellas o ajusta "
-            "MCP_LOCAL_UPLOAD_DIRS."
+            f"locales: {shown}. Copia el archivo a la primera y pasa solo su "
+            "nombre, o ajusta MCP_LOCAL_UPLOAD_DIRS. Los adjuntos del chat no "
+            "son accesibles desde el equipo."
         )
 
     relative = Path(os.path.normpath(str(candidate))).relative_to(
@@ -75,8 +84,13 @@ def resolve_local_file(value: object, allowed_dirs: Sequence[Path]) -> Path:
         try:
             mode = os.lstat(current).st_mode
         except FileNotFoundError:
+            hint = (
+                f" Copia el archivo a la carpeta {inbox} y vuelve a intentarlo."
+                if relative_name
+                else ""
+            )
             raise FileOperationError(
-                f"El archivo local '{candidate.name}' no existe en esa ruta."
+                f"El archivo local '{candidate.name}' no existe.{hint}"
             ) from None
         except OSError as exc:
             raise FileOperationError(
@@ -110,3 +124,44 @@ def read_limited(path: Path, limit: int) -> bytes:
             "MCP_FILE_MAX_BYTES (máximo 10485760) o reduce el archivo."
         )
     return data
+
+
+def list_inbox(
+    root: Path,
+    allowed_extensions: Sequence[str],
+    *,
+    max_depth: int = 3,
+    limit: int = 200,
+) -> list[dict[str, object]]:
+    """Lista los archivos regulares de la bandeja (sin symlinks ni ocultos)."""
+
+    found: list[dict[str, object]] = []
+
+    def walk(directory: Path, prefix: str, depth: int) -> None:
+        if len(found) >= limit:
+            return
+        try:
+            entries = sorted(os.scandir(directory), key=lambda e: e.name.lower())
+        except OSError:
+            return
+        for entry in entries:
+            if len(found) >= limit:
+                return
+            if entry.name.startswith(".") or entry.is_symlink():
+                continue
+            name = prefix + entry.name
+            if entry.is_dir(follow_symlinks=False):
+                if depth < max_depth:
+                    walk(Path(entry.path), name + "/", depth + 1)
+            elif entry.is_file(follow_symlinks=False):
+                suffix = os.path.splitext(entry.name)[1].lower()
+                found.append(
+                    {
+                        "name": name,
+                        "size": entry.stat(follow_symlinks=False).st_size,
+                        "uploadable": suffix in allowed_extensions,
+                    }
+                )
+
+    walk(root, "", 1)
+    return found

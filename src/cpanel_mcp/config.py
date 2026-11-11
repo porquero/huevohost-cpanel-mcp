@@ -87,7 +87,8 @@ def _parse_max_file_bytes(env: Mapping[str, str]) -> int:
 
 
 def _default_local_upload_dirs() -> tuple[Path, ...]:
-    return (Path.home() / "Downloads",)
+    # Bandeja "archivos" junto al proyecto: el usuario copia ahí lo que quiere subir.
+    return (PROJECT_ROOT / "archivos",)
 
 
 def _parse_local_upload_dirs(env: Mapping[str, str]) -> tuple[Path, ...]:

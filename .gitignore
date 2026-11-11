@@ -26,3 +26,7 @@ dist/
 Thumbs.db
 Desktop.ini
 /Claude outputs
+
+# Bandeja de archivos del usuario para upload_local_file (no se versiona su contenido)
+/archivos/*
+!/archivos/.gitkeep
