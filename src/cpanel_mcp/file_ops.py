@@ -114,7 +114,7 @@ def normalize_public_path(value: object, *, allow_root: bool = True) -> str:
     """Normaliza una ruta y la confina a ``public_html``.
 
     Acepta ``public_html/x``, ``/public_html/x`` y rutas relativas como
-    ``ait.lowcode.cl/index.html`` (interpretadas desde ``public_html``).
+    ``sitio.example.com/index.html`` (interpretadas desde ``public_html``).
     """
 
     if not isinstance(value, str):
@@ -145,7 +145,7 @@ def normalize_public_path(value: object, *, allow_root: bool = True) -> str:
     elif raw.startswith("/"):
         raise UnsafePathError(
             "La ruta debe estar dentro de /public_html. Por ejemplo: "
-            "/public_html/ait.lowcode.cl/index.html."
+            "/public_html/sitio.example.com/index.html."
         )
     else:
         # Ruta relativa a public_html.

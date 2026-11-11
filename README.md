@@ -90,7 +90,7 @@ Validaciones: usuario de 1 a 64 caracteres, dominio FQDN en minúsculas, cuota e
 
 Crea **solo subdominios** sobre un dominio que ya pertenece a la cuenta (principal, addon o parked). No crea addon domains, parked domains ni cambios de DNS.
 
-- `subdomain`: solo la etiqueta, por ejemplo `blog` para `blog.lowcode.cl`. No admite puntos, rutas ni nombres reservados (`www`, `mail`, `cpanel`, `webmail`, `cgi-bin`, etc.).
+- `subdomain`: solo la etiqueta, por ejemplo `blog` para `blog.example.com`. No admite puntos, rutas ni nombres reservados (`www`, `mail`, `cpanel`, `webmail`, `cgi-bin`, etc.).
 - `domain`: dominio padre existente en la cuenta.
 - `directory`: document root opcional. Se normaliza y se confina a `/public_html`; si se omite, se usa `public_html/<subdominio>`. No puede existir ya (para no adoptar el contenido de un sitio existente) ni atravesar enlaces simbólicos.
 - `execute=false`: no contacta cPanel y devuelve el plan (FQDN y document root).
@@ -99,7 +99,7 @@ Crea **solo subdominios** sobre un dominio que ya pertenece a la cuenta (princip
 Ejemplo:
 
 ```json
-{ "subdomain": "blog", "domain": "lowcode.cl", "directory": null, "execute": true }
+{ "subdomain": "blog", "domain": "example.com", "directory": null, "execute": true }
 ```
 
 Al terminar, sube el contenido con `upload_file` o `create_file` dentro de `public_html/blog`. El servidor no expone el borrado de subdominios: si te equivocas, elimínalo manualmente desde cPanel.
@@ -108,9 +108,9 @@ Al terminar, sube el contenido con `upload_file` o `create_file` dentro de `publ
 
 Todas las herramientas de archivos están confinadas a `public_html`. Aceptan:
 
-- `public_html/ait.lowcode.cl/index.html`
-- `/public_html/ait.lowcode.cl/index.html`
-- `ait.lowcode.cl/index.html` (relativa a `/public_html`)
+- `public_html/sitio.example.com/index.html`
+- `/public_html/sitio.example.com/index.html`
+- `sitio.example.com/index.html` (relativa a `/public_html`)
 
 Se rechazan rutas absolutas fuera de `/public_html`, componentes `.` o `..`, caracteres de control, nombres con `,` o `;` y cualquier componente que sea un enlace simbólico. Las escrituras comprueban cada directorio existente antes de tocar el archivo.
 
@@ -140,7 +140,7 @@ Aplica el mismo límite de tamaño, la misma política de extensiones bloqueadas
 Mueve un archivo o directorio a la papelera de cPanel, donde puede restaurarse desde **Archivos → Papelera**. Exige que `confirm` repita la ruta exacta; por ejemplo:
 
 ```json
-{ "path": "public_html/ait.lowcode.cl/viejo.html", "confirm": "/public_html/ait.lowcode.cl/viejo.html" }
+{ "path": "public_html/sitio.example.com/viejo.html", "confirm": "/public_html/sitio.example.com/viejo.html" }
 ```
 
 No permite borrar `/public_html` completo ni seguir enlaces simbólicos. El borrado es recuperable, pero se trata como acción de alto impacto: revisa la ruta antes de confirmar.
@@ -191,14 +191,14 @@ La contraseña se imprime en la terminal una sola vez. No se guarda en logs ni a
 Prueba de humo de archivos (crea, descarga, verifica y mueve a la papelera un archivo temporal):
 
 ```powershell
-.venv\Scripts\python.exe scripts\mcp_files_smoke.py --dir public_html/ait.lowcode.cl --confirm
+.venv\Scripts\python.exe scripts\mcp_files_smoke.py --dir public_html/sitio.example.com --confirm
 ```
 
 Prueba de humo de subdominios (primero dry-run; con `--confirm CREAR` crea un subdominio temporal y lo elimina al terminar):
 
 ```powershell
-.venv\Scripts\python.exe scripts\mcp_subdomain_smoke.py --domain lowcode.cl
-.venv\Scripts\python.exe scripts\mcp_subdomain_smoke.py --domain lowcode.cl --confirm CREAR
+.venv\Scripts\python.exe scripts\mcp_subdomain_smoke.py --domain example.com
+.venv\Scripts\python.exe scripts\mcp_subdomain_smoke.py --domain example.com --confirm CREAR
 ```
 
 Comprobación del cliente `cpanel-api` y de que el token no está escrito en el proyecto:

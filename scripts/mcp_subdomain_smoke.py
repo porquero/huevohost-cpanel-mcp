@@ -214,7 +214,7 @@ def main() -> int:
     parser.add_argument(
         "--domain",
         required=True,
-        help="Dominio padre existente en la cuenta, por ejemplo lowcode.cl",
+        help="Dominio padre existente en la cuenta, por ejemplo example.com",
     )
     parser.add_argument(
         "--label",

@@ -172,8 +172,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--dir",
-        default="public_html/ait.lowcode.cl",
-        help="Directorio dentro de public_html (por defecto ait.lowcode.cl)",
+        default="public_html/sitio.example.com",
+        help="Directorio dentro de public_html (por defecto sitio.example.com)",
     )
     parser.add_argument(
         "--confirm",

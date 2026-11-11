@@ -55,8 +55,8 @@ py -3.11 -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
 .venv\Scripts\python.exe -m pytest
 .venv\Scripts\python.exe scripts\mcp_smoke.py
-.venv\Scripts\python.exe scripts\mcp_files_smoke.py --dir public_html/ait.lowcode.cl --confirm
-.venv\Scripts\python.exe scripts\mcp_subdomain_smoke.py --domain lowcode.cl --confirm CREAR
+.venv\Scripts\python.exe scripts\mcp_files_smoke.py --dir public_html/sitio.example.com --confirm
+.venv\Scripts\python.exe scripts\mcp_subdomain_smoke.py --domain example.com --confirm CREAR
 .venv\Scripts\python.exe scripts\check_no_secrets.py
 ```
 

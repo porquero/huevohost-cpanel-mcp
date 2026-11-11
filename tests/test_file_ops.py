@@ -178,10 +178,10 @@ def make_ops(client: FakeFileClient, *, max_bytes: int = 1_048_576) -> FileOpera
     [
         ("public_html", "public_html"),
         ("/public_html", "public_html"),
-        ("public_html/ait.lowcode.cl/index.html", "public_html/ait.lowcode.cl/index.html"),
-        ("/public_html/ait.lowcode.cl/index.html", "public_html/ait.lowcode.cl/index.html"),
-        ("ait.lowcode.cl/index.html", "public_html/ait.lowcode.cl/index.html"),
-        ("public_html/ait.lowcode.cl/", "public_html/ait.lowcode.cl"),
+        ("public_html/sitio.example.com/index.html", "public_html/sitio.example.com/index.html"),
+        ("/public_html/sitio.example.com/index.html", "public_html/sitio.example.com/index.html"),
+        ("sitio.example.com/index.html", "public_html/sitio.example.com/index.html"),
+        ("public_html/sitio.example.com/", "public_html/sitio.example.com"),
     ],
 )
 def test_normalize_accepts_paths_under_public_html(raw: str, expected: str) -> None:
@@ -194,9 +194,9 @@ def test_normalize_accepts_paths_under_public_html(raw: str, expected: str) -> N
         "",
         "/",
         "/etc/passwd",
-        "/home/lowcode/public_html/index.html",
+        "/home/usuario/public_html/index.html",
         "public_html/../secret.txt",
-        "public_html/ait.lowcode.cl/../../secret.txt",
+        "public_html/sitio.example.com/../../secret.txt",
         "public_html//index.html",
         "public_html/./index.html",
         "C:\\Windows\\win.ini",

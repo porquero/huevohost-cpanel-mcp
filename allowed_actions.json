@@ -23,7 +23,7 @@
       "name": "create_subdomain",
       "level": "escritura_reversible",
       "enabled": true,
-      "description": "Crea un subdominio (por ejemplo blog.lowcode.cl) sobre el dominio principal, un addon domain o un parked domain de la cuenta. No crea addon domains ni parked domains. Con execute=false solo simula y no contacta cPanel. El document root debe estar dentro de /public_html, debe estar libre y el subdominio no puede existir. Al terminar verifica el subdominio en cPanel."
+      "description": "Crea un subdominio (por ejemplo blog.example.com) sobre el dominio principal, un addon domain o un parked domain de la cuenta. No crea addon domains ni parked domains. Con execute=false solo simula y no contacta cPanel. El document root debe estar dentro de /public_html, debe estar libre y el subdominio no puede existir. Al terminar verifica el subdominio en cPanel."
     },
     {
       "name": "list_files",
