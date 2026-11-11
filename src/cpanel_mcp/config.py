@@ -135,8 +135,6 @@ class Settings:
     )
     log_level: str = "WARNING"
     max_file_bytes: int = 1_048_576
-    upload_service_url: str | None = None
-    upload_admin_secret: str | None = field(default=None, repr=False)
 
     @property
     def base_url(self) -> str:
@@ -175,11 +173,6 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         else PROJECT_ROOT / "allowed_actions.json"
     )
 
-    upload_url = (source.get("UPLOAD_SERVICE_URL") or "").strip().rstrip("/") or None
-    if upload_url is not None and not upload_url.startswith("https://"):
-        raise ConfigError("UPLOAD_SERVICE_URL debe empezar con https://.")
-    upload_secret = (source.get("UPLOAD_ADMIN_SECRET") or "").strip() or None
-
     return Settings(
         host=host,
         user=user,
@@ -190,6 +183,4 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         allowed_actions_path=allowed_actions_path,
         log_level=log_level,
         max_file_bytes=_parse_max_file_bytes(source),
-        upload_service_url=upload_url,
-        upload_admin_secret=upload_secret,
     )

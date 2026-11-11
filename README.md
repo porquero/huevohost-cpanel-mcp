@@ -9,7 +9,6 @@ Incluye:
 - Creación de cuentas de correo con dry-run por defecto, contraseña aleatoria de 20 caracteres y verificación posterior.
 - Creación de **subdominios** sobre dominios existentes de la cuenta (nunca addon domains ni parked domains), con dry-run por defecto y document root confinado a `/public_html`.
 - Operaciones de archivos confinadas a `/public_html`: listar, descargar texto, crear, subir y mover a la papelera.
-- Subida de **binarios** (fotos, logos, PDFs, fuentes) por ticket de un solo uso: `create_upload_ticket` + servicio HTTPS de subida. Ver [docs/UPLOAD_SERVICE.md](docs/UPLOAD_SERVICE.md).
 
 No incluye cambio de contraseñas, bases de datos, DNS ni SSL. La publicación de landings (Fase 2) está solo diseñada. `delete_file` mueve a la papelera de cPanel, no borra de forma permanente.
 
@@ -42,8 +41,6 @@ El paquete `cpanel-api` se instala como dependencia de desarrollo y se usa solo 
 | `AUDIT_LOG_PATH` | No | Ruta de auditoría. Por defecto `%LOCALAPPDATA%\Huevohost\cpanel-mcp\audit.jsonl` en Windows. |
 | `ALLOWED_ACTIONS_PATH` | No | Ruta de `allowed_actions.json`. Por defecto el archivo del proyecto. |
 | `MCP_FILE_MAX_BYTES` | No | Tamaño máximo por archivo para crear, subir o descargar. Por defecto `1048576` (1 MiB); mínimo `1024`, máximo `10485760`. |
-| `UPLOAD_SERVICE_URL` | Para `create_upload_ticket` | URL HTTPS del servicio de subida, p. ej. `https://upload.acopios.cl`. |
-| `UPLOAD_ADMIN_SECRET` | Para `create_upload_ticket` | Secreto compartido con el servicio de subida. Nunca se registra. |
 | `CPANEL_MCP_LOG_LEVEL` | No | `DEBUG`, `INFO`, `WARNING`, `ERROR` o `CRITICAL`; por defecto `WARNING`. Los logs van a stderr. |
 
 Configura las credenciales en las variables de usuario del sistema, no en el repositorio. `.env` está ignorado por Git y el servidor no lo carga automáticamente.
@@ -64,7 +61,6 @@ Configura las credenciales en las variables de usuario del sistema, no en el rep
     { "name": "download_file", "level": "lectura", "enabled": true },
     { "name": "create_file", "level": "escritura_reversible", "enabled": true },
     { "name": "upload_file", "level": "escritura_reversible", "enabled": true },
-    { "name": "create_upload_ticket", "level": "escritura_reversible", "enabled": true },
     { "name": "delete_file", "level": "alto_impacto", "enabled": true },
     { "name": "publish_landing_page", "level": "alto_impacto", "enabled": false }
   ]
@@ -138,12 +134,6 @@ Sube un archivo usando exactamente uno de estos campos:
 - `content_base64`: contenido binario codificado en base64 (imágenes, fuentes, PDFs, etc.).
 
 Aplica el mismo límite de tamaño, la misma política de extensiones bloqueadas y el mismo respaldo a papelera que `create_file`.
-
-Devuelve además `sha256` del archivo guardado y acepta `expected_sha256` (si no coincide, no escribe nada). Un base64 inválido se reporta con la posición del primer carácter erróneo y el estado del padding. **`content_base64` se reserva para archivos de hasta ~5 KB**; para el resto usa `create_upload_ticket`.
-
-### `create_upload_ticket(path, max_bytes=null, overwrite=false, expected_sha256=null)`
-
-Pide al servicio de subida un ticket para un único archivo y devuelve `upload_url` (HTTPS), `method: "PUT"`, `expires_at` y un `curl_example` (`curl -sS -T foto.jpg "<url>"`) para ejecutar desde el sandbox. El ticket es de un solo uso, vence a los 5 minutos y queda ligado a la cuenta, la ruta, `max_bytes` y `overwrite`. Extensiones permitidas: jpg, jpeg, png, webp, gif, ico, pdf, woff, woff2, ttf, otf (zip opcional; SVG rechazado). El servidor verifica que el contenido real coincida con la extensión. Si no están definidas `UPLOAD_SERVICE_URL` y `UPLOAD_ADMIN_SECRET`, la herramienta falla cerrada con un mensaje claro. Despliegue y contrato HTTP: [docs/UPLOAD_SERVICE.md](docs/UPLOAD_SERVICE.md).
 
 ### `delete_file(path, confirm)`
 

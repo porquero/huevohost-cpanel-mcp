@@ -47,13 +47,7 @@
       "name": "upload_file",
       "level": "escritura_reversible",
       "enabled": true,
-      "description": "Sube un archivo dentro de /public_html usando content (texto) o content_base64 (binario). content_base64 se reserva para archivos de hasta unos 5 KB: el modelo debe escribir los bytes en su respuesta y por encima de ese tamaño el base64 suele llegar corrupto. Para fotos, logos, PDFs y fuentes usa create_upload_ticket. Devuelve el sha256 del archivo guardado y acepta expected_sha256 para detectar contenido alterado. Si el destino existe y overwrite=true, primero lo mueve a la papelera. Respeta MCP_FILE_MAX_BYTES y bloquea archivos ejecutables."
-    },
-    {
-      "name": "create_upload_ticket",
-      "level": "escritura_reversible",
-      "enabled": true,
-      "description": "Crea un ticket de subida para un archivo binario (JPG, PNG, WebP, GIF, ICO, PDF, WOFF/WOFF2, TTF/OTF) dentro de /public_html. Devuelve upload_url (HTTPS, un solo uso, vence en 5 minutos), method=PUT, expires_at y un comando curl -T listo para ejecutar desde el sandbox. Úsala para cualquier binario de más de ~5 KB en lugar de upload_file con base64. Parámetros: path (relativo a /public_html), max_bytes opcional, overwrite (false por defecto; si es true el archivo anterior va a la papelera) y expected_sha256 opcional. Bloquea ejecutables, SVG y dobles extensiones; el servidor verifica que el contenido real coincida con la extensión."
+      "description": "Sube un archivo dentro de /public_html usando content (texto) o content_base64 (binario). Si el destino existe y overwrite=true, primero lo mueve a la papelera. Respeta MCP_FILE_MAX_BYTES y bloquea archivos ejecutables."
     },
     {
       "name": "delete_file",
