@@ -86,6 +86,31 @@ def _parse_max_file_bytes(env: Mapping[str, str]) -> int:
     return value
 
 
+def _default_local_upload_dirs() -> tuple[Path, ...]:
+    return (Path.home() / "Downloads",)
+
+
+def _parse_local_upload_dirs(env: Mapping[str, str]) -> tuple[Path, ...]:
+    raw = (env.get("MCP_LOCAL_UPLOAD_DIRS") or "").strip()
+    if not raw:
+        return _default_local_upload_dirs()
+    dirs: list[Path] = []
+    for item in raw.split(os.pathsep):
+        item = item.strip()
+        if not item:
+            continue
+        path = Path(item).expanduser()
+        if not path.is_absolute():
+            raise ConfigError(
+                "MCP_LOCAL_UPLOAD_DIRS debe contener rutas absolutas separadas "
+                f"por '{os.pathsep}'."
+            )
+        dirs.append(path)
+    if not dirs:
+        raise ConfigError("MCP_LOCAL_UPLOAD_DIRS no contiene ninguna carpeta.")
+    return tuple(dirs)
+
+
 def _normalize_host(raw: str) -> tuple[str, int | None]:
     host = raw.strip()
     if host.lower().startswith("https://"):
@@ -135,6 +160,9 @@ class Settings:
     )
     log_level: str = "WARNING"
     max_file_bytes: int = 1_048_576
+    local_upload_dirs: tuple[Path, ...] = field(
+        default_factory=_default_local_upload_dirs
+    )
 
     @property
     def base_url(self) -> str:
@@ -183,4 +211,5 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         allowed_actions_path=allowed_actions_path,
         log_level=log_level,
         max_file_bytes=_parse_max_file_bytes(source),
+        local_upload_dirs=_parse_local_upload_dirs(source),
     )

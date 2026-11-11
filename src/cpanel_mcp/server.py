@@ -35,7 +35,9 @@ INSTRUCTIONS = (
     "domains) y su document root debe quedar dentro de /public_html. "
     "Las herramientas de archivos trabajan únicamente dentro de /public_html. "
     "No siguen enlaces simbólicos, no aceptan rutas con '..' y no permiten escribir "
-    "archivos ejecutables como .php, .cgi o .htaccess. delete_file mueve a la "
+    "archivos ejecutables como .php, .cgi o .htaccess. Para subir binarios (fotos, "
+    "logos, PDFs, fuentes) usa upload_local_file con la ruta del archivo en el "
+    "equipo del usuario; no pases base64 largo por upload_file. delete_file mueve a la "
     "papelera de cPanel y exige confirmar la ruta exacta. No existen herramientas "
     "de cambio de contraseñas, bases de datos, DNS ni SSL."
 )
@@ -54,6 +56,7 @@ def _implemented_handlers(
         "download_file": file_operations.download_file,
         "create_file": file_operations.create_file,
         "upload_file": file_operations.upload_file,
+        "upload_local_file": file_operations.upload_local_file,
         "delete_file": file_operations.delete_file,
     }
 

@@ -118,7 +118,10 @@ Comprobaciones adicionales:
 - [ ] Crear con `overwrite=false` sobre un archivo existente devuelve el error «ya existe» y no lo modifica.
 - [ ] Crear con `overwrite=true` mueve el original a la papelera antes de escribir.
 - [ ] `create_file` rechaza `shell.php` y `.htaccess`.
-- [ ] `upload_file` acepta texto con `content` y binario con `content_base64`.
+- [ ] `upload_file` acepta texto con `content` y binario con `content_base64` (solo archivos pequeños, ~5 KB).
+- [ ] `upload_local_file` sube un JPEG real de ~20 KB desde `Descargas`: devuelve `verified: true`, el `sha256` coincide con `Get-FileHash` y `https://TU_SUBDOMINIO/foto.jpg` responde 200 con `content-type: image/jpeg`.
+- [ ] `upload_local_file` rechaza un archivo fuera de `MCP_LOCAL_UPLOAD_DIRS`, un `.svg`, un destino `foto.php.jpg` y un `.jpg` cuyo contenido es un PNG.
+- [ ] `upload_local_file` con `overwrite=false` sobre un destino existente devuelve «ya existe»; con `overwrite=true` el original aparece en la papelera.
 - [ ] `download_file` rechaza `.png` y `.env`.
 - [ ] Una ruta con `..` o `/etc/passwd` se rechaza antes de contactar cPanel.
 - [ ] `delete_file` con `confirm` distinto de la ruta se rechaza sin mover nada.

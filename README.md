@@ -9,6 +9,7 @@ Incluye:
 - Creación de cuentas de correo con dry-run por defecto, contraseña aleatoria de 20 caracteres y verificación posterior.
 - Creación de **subdominios** sobre dominios existentes de la cuenta (nunca addon domains ni parked domains), con dry-run por defecto y document root confinado a `/public_html`.
 - Operaciones de archivos confinadas a `/public_html`: listar, descargar texto, crear, subir y mover a la papelera.
+- Subida de **binarios** (fotos, logos, PDFs, fuentes) desde el disco del usuario con `upload_local_file`: los bytes no pasan por el modelo y no se instala nada en la cuenta cPanel.
 
 No incluye cambio de contraseñas, bases de datos, DNS ni SSL. La publicación de landings (Fase 2) está solo diseñada. `delete_file` mueve a la papelera de cPanel, no borra de forma permanente.
 
@@ -41,6 +42,7 @@ El paquete `cpanel-api` se instala como dependencia de desarrollo y se usa solo 
 | `AUDIT_LOG_PATH` | No | Ruta de auditoría. Por defecto `%LOCALAPPDATA%\Huevohost\cpanel-mcp\audit.jsonl` en Windows. |
 | `ALLOWED_ACTIONS_PATH` | No | Ruta de `allowed_actions.json`. Por defecto el archivo del proyecto. |
 | `MCP_FILE_MAX_BYTES` | No | Tamaño máximo por archivo para crear, subir o descargar. Por defecto `1048576` (1 MiB); mínimo `1024`, máximo `10485760`. |
+| `MCP_LOCAL_UPLOAD_DIRS` | No | Carpetas locales desde las que `upload_local_file` puede leer archivos, separadas por `;` en Windows y `:` en Linux/macOS (rutas absolutas). Por defecto, `Descargas` del usuario. |
 | `CPANEL_MCP_LOG_LEVEL` | No | `DEBUG`, `INFO`, `WARNING`, `ERROR` o `CRITICAL`; por defecto `WARNING`. Los logs van a stderr. |
 
 Configura las credenciales en las variables de usuario del sistema, no en el repositorio. `.env` está ignorado por Git y el servidor no lo carga automáticamente.
@@ -61,6 +63,7 @@ Configura las credenciales en las variables de usuario del sistema, no en el rep
     { "name": "download_file", "level": "lectura", "enabled": true },
     { "name": "create_file", "level": "escritura_reversible", "enabled": true },
     { "name": "upload_file", "level": "escritura_reversible", "enabled": true },
+    { "name": "upload_local_file", "level": "escritura_reversible", "enabled": true },
     { "name": "delete_file", "level": "alto_impacto", "enabled": true },
     { "name": "publish_landing_page", "level": "alto_impacto", "enabled": false }
   ]
@@ -134,6 +137,23 @@ Sube un archivo usando exactamente uno de estos campos:
 - `content_base64`: contenido binario codificado en base64 (imágenes, fuentes, PDFs, etc.).
 
 Aplica el mismo límite de tamaño, la misma política de extensiones bloqueadas y el mismo respaldo a papelera que `create_file`.
+
+**`content_base64` solo es fiable hasta ~5 KB**: el modelo tiene que escribir los bytes en su respuesta y, por encima de ese tamaño, el base64 suele llegar corrupto. Para fotos, logos, PDFs y fuentes usa `upload_local_file`.
+
+### `upload_local_file(local_path, path, overwrite=false)`
+
+Lee un archivo del **equipo del usuario** y lo sube a `/public_html` con `Fileman::upload_files` (multipart). El modelo solo pasa rutas; los bytes nunca viajan en la conversación, así que no hay límite práctico de tamaño más allá de `MCP_FILE_MAX_BYTES`.
+
+- `local_path`: ruta **absoluta** del archivo local, por ejemplo `C:\Users\ana\Downloads\logo.png`. Debe estar dentro de una carpeta de `MCP_LOCAL_UPLOAD_DIRS` (por defecto `Descargas`). Se rechazan `..`, enlaces simbólicos, carpetas y cualquier ruta fuera de la allowlist.
+- `path`: destino relativo a `/public_html`; su extensión decide el tipo esperado y no tiene por qué coincidir con el nombre local.
+- Tipos permitidos: jpg, jpeg, png, webp, gif, ico, pdf, woff, woff2, ttf, otf. El contenido real (magic bytes) debe coincidir con la extensión de destino. SVG, ejecutables, `.htaccess` y dobles extensiones (`foto.php.jpg`) se rechazan.
+- Respeta `MCP_FILE_MAX_BYTES` (1 MiB por defecto, máximo 10 MiB: súbelo si necesitas fotos más grandes).
+- Si el destino existe y `overwrite=true`, el original va antes a la papelera de cPanel.
+- Devuelve `bytes`, `sha256`, `mime` y `verified`. No devuelve la ruta local completa, solo el nombre del archivo.
+
+Ejemplo: «Sube `C:\Users\ana\Downloads\logo.png` a `sitio.example.com/img/logo.png`».
+
+**Riesgo a tener en cuenta:** la herramienta puede publicar en la web cualquier archivo permitido de las carpetas configuradas. Por eso la allowlist por defecto es solo `Descargas`; no añadas carpetas con documentos privados (p. ej. `Documentos`) a `MCP_LOCAL_UPLOAD_DIRS`.
 
 ### `delete_file(path, confirm)`
 
@@ -217,6 +237,7 @@ La checklist manual completa está en `docs/MANUAL_TEST_CHECKLIST.md`.
 - Errores claros para token inválido, permisos, rol de correo o de archivos desactivado, timeout, cuenta existente, archivo existente y respuestas inválidas.
 - Auditoría append-only en JSONL, con argumentos saneados. Nunca incluye contraseñas, tokens ni el contenido de los archivos.
 - stdout reservado para MCP; cualquier log o error de arranque va a stderr.
+- `upload_local_file` solo lee archivos regulares de las carpetas de `MCP_LOCAL_UPLOAD_DIRS`, no sigue enlaces simbólicos, solo admite tipos binarios de una allowlist verificados por magic bytes y nunca registra el contenido ni devuelve la ruta local completa.
 - `.gitignore` excluye `.venv`, `.env`, `audit.jsonl`, logs y cachés.
 - Las rutas de archivos se confinan a `/public_html`, no se siguen enlaces simbólicos y no se permite sobrescribir sin respaldo en la papelera.
 - `create_subdomain` solo acepta dominios padre de la cuenta, rechaza etiquetas reservadas y document roots fuera de `/public_html`, existentes o que atraviesen enlaces simbólicos. No crea addon ni parked domains y no expone el borrado de subdominios.

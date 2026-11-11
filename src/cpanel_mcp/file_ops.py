@@ -10,8 +10,10 @@ se mueve a la papelera de cPanel y después se escribe el nuevo contenido.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
+import hashlib
 from typing import Any
 
 from .config import Settings
@@ -343,6 +345,7 @@ class FileOperations:
     def __init__(self, client: CPanelClient, settings: Settings) -> None:
         self.client = client
         self.max_file_bytes = settings.max_file_bytes
+        self.local_upload_dirs = settings.local_upload_dirs
 
     async def _inspect(self, path: str) -> dict[str, Any] | None:
         return await inspect_remote_path(self.client, path)
@@ -651,6 +654,74 @@ class FileOperations:
             "bytes": len(payload),
             "verified": verified,
             "message": "Archivo subido a cPanel.",
+        }
+        if not verified:
+            result["warning"] = (
+                "cPanel aceptó la subida, pero la verificación inmediata no "
+                "coincide con el tamaño esperado. Revisa el archivo en cPanel."
+            )
+        return result
+
+    async def upload_local_file(
+        self,
+        local_path: str,
+        path: str,
+        overwrite: bool = False,
+    ) -> dict[str, Any]:
+        """Sube un archivo binario leído del disco local, sin pasar por el modelo."""
+
+        # Importación diferida: estos módulos importan constantes de este.
+        from .binary_types import expected_mime_for, verify_content
+        from .local_files import read_limited, resolve_local_file
+
+        normalized = normalize_public_path(path, allow_root=False)
+        overwrite = _validate_overwrite(overwrite)
+        _, name = _parent_and_name(normalized)
+        _check_writable_path(normalized, name)
+        expected_mime = expected_mime_for(name)
+
+        source = resolve_local_file(local_path, self.local_upload_dirs)
+        payload = await asyncio.to_thread(
+            read_limited, source, self.max_file_bytes
+        )
+        if not payload:
+            raise ValidationError("El archivo local está vacío.")
+        mime = verify_content(expected_mime, payload)
+        digest = hashlib.sha256(payload).hexdigest()
+
+        parent, _, existing = await self._prepare_write(normalized)
+        if existing is not None and not overwrite:
+            raise FileAlreadyExistsError(
+                f"'{display_path(normalized)}' ya existe. Usa overwrite=true "
+                "para reemplazarlo; el original se moverá a la papelera."
+            )
+
+        backed_up = await self._backup_existing(normalized, existing)
+        try:
+            await self.client.upload_file(parent, name, payload, overwrite=False)
+        except Exception as exc:
+            if backed_up:
+                raise FileOperationError(
+                    f"No se pudo subir '{display_path(normalized)}'. El "
+                    "archivo anterior quedó en la papelera de cPanel y puede "
+                    "restaurarse desde allí."
+                ) from exc
+            raise
+
+        verified = await self._verify_file(normalized, len(payload))
+        result: dict[str, Any] = {
+            "path": normalized,
+            "path_display": display_path(normalized),
+            "uploaded": True,
+            "created": existing is None,
+            "overwritten": backed_up,
+            "backed_up_to_trash": backed_up,
+            "source_filename": source.name,
+            "bytes": len(payload),
+            "sha256": digest,
+            "mime": mime,
+            "verified": verified,
+            "message": "Archivo local subido a cPanel.",
         }
         if not verified:
             result["warning"] = (

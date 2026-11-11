@@ -47,7 +47,13 @@
       "name": "upload_file",
       "level": "escritura_reversible",
       "enabled": true,
-      "description": "Sube un archivo dentro de /public_html usando content (texto) o content_base64 (binario). Si el destino existe y overwrite=true, primero lo mueve a la papelera. Respeta MCP_FILE_MAX_BYTES y bloquea archivos ejecutables."
+      "description": "Sube un archivo dentro de /public_html usando content (texto) o content_base64 (binario). content_base64 solo sirve para archivos de hasta unos 5 KB: el modelo debe escribir los bytes y por encima de ese tamaño el base64 suele llegar corrupto; para fotos, logos, PDFs y fuentes usa upload_local_file. Si el destino existe y overwrite=true, primero lo mueve a la papelera. Respeta MCP_FILE_MAX_BYTES y bloquea archivos ejecutables."
+    },
+    {
+      "name": "upload_local_file",
+      "level": "escritura_reversible",
+      "enabled": true,
+      "description": "Sube a /public_html un archivo binario (JPG, PNG, WebP, GIF, ICO, PDF, WOFF/WOFF2, TTF/OTF) leído del disco del usuario, sin que los bytes pasen por el modelo. Recibe local_path (ruta absoluta del archivo en el equipo del usuario, dentro de las carpetas permitidas por MCP_LOCAL_UPLOAD_DIRS; por defecto Descargas), path (destino relativo a /public_html) y overwrite (false por defecto; si es true el archivo anterior va a la papelera). Verifica que el contenido real coincida con la extensión, rechaza SVG, ejecutables, dobles extensiones y enlaces simbólicos, respeta MCP_FILE_MAX_BYTES y devuelve el sha256."
     },
     {
       "name": "delete_file",

@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPanel de Huevohost: listar dominios, listar y crear cuentas de correo, crear subdominios sobre dominios existentes, y listar, descargar, crear, subir y mover a la papelera archivos dentro de `/public_html`. Fase 2 está solo diseñada: publicar landings en subdominios.
+Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPanel de Huevohost: listar dominios, listar y crear cuentas de correo, crear subdominios sobre dominios existentes, y listar, descargar, crear, subir (texto, base64 pequeño o binarios desde el disco local) y mover a la papelera archivos dentro de `/public_html`. Fase 2 está solo diseñada: publicar landings en subdominios.
 
 ## Seguridad obligatoria
 
@@ -35,6 +35,8 @@ Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPane
 - `create_file` y `upload_file` bloquean extensiones ejecutables o de configuración (`.php`, `.phtml`, `.phar`, `.cgi`, `.pl`, `.py`, `.sh`, `.htaccess`, `.user.ini`, `php.ini`, etc.) y no escriben dentro de `.git`, `.svn`, `.hg` ni `.ssh`.
 - `download_file` solo devuelve texto y bloquea nombres sensibles (`.env`, `.htaccess`, `wp-config.php`, `.htpasswd`, claves privadas) y directorios de control como `.git`, `.svn`, `.hg` o `.ssh`. No registres el contenido descargado.
 - `delete_file` exige que `confirm` coincida exactamente con la ruta normalizada. No permitas borrar `public_html` completo.
+- `upload_file` con `content_base64` se reserva para archivos pequeños (~5 KB); los binarios grandes se suben con `upload_local_file`. No añadas servicios, procesos ni archivos en la cuenta cPanel del usuario: el producto es para usuarios finales y todo corre en el MCP local.
+- `upload_local_file` lee solo de `MCP_LOCAL_UPLOAD_DIRS` (por defecto `~/Downloads`), exige ruta absoluta, rechaza `..`, symlinks y no-regulares, permite solo la allowlist de `binary_types.py` y verifica magic bytes contra la extensión de destino. No devuelvas ni registres la ruta local completa ni los bytes.
 - Respeta `MCP_FILE_MAX_BYTES` (1 MiB por defecto) en crear, subir y descargar. No lo desactives para acomodar una prueba.
 
 ## Arquitectura
@@ -43,6 +45,8 @@ Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPane
 - `src/cpanel_mcp/cpanel.py`: cliente UAPI sobre `httpx`, timeout de 30 s y mapeo de errores.
 - `src/cpanel_mcp/operations.py`: lógica de dominios, correo y subdominios.
 - `src/cpanel_mcp/file_ops.py`: normalización de rutas, comprobación de symlinks y operaciones de archivos.
+- `src/cpanel_mcp/binary_types.py`: allowlist de binarios y verificación por magic bytes.
+- `src/cpanel_mcp/local_files.py`: resolución y lectura segura de archivos locales.
 - `src/cpanel_mcp/server.py`: FastMCP y registro filtrado de herramientas.
 - `src/cpanel_mcp/audit.py`: auditoría JSONL.
 - `src/cpanel_mcp/validators.py`: validaciones estrictas.
