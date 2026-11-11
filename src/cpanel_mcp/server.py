@@ -20,6 +20,7 @@ from .errors import ConfigError
 from .file_ops import FileOperations
 from .logging_setup import redact_text
 from .operations import Operations
+from .uploads.client import UploadTicketTool
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,9 @@ INSTRUCTIONS = (
     "domains) y su document root debe quedar dentro de /public_html. "
     "Las herramientas de archivos trabajan únicamente dentro de /public_html. "
     "No siguen enlaces simbólicos, no aceptan rutas con '..' y no permiten escribir "
-    "archivos ejecutables como .php, .cgi o .htaccess. delete_file mueve a la "
+    "archivos ejecutables como .php, .cgi o .htaccess. Para subir binarios (fotos, "
+    "logos, PDFs, fuentes) de más de ~5 KB usa create_upload_ticket y sube el "
+    "archivo con curl -T; no pases base64 largo por upload_file. delete_file mueve a la "
     "papelera de cPanel y exige confirmar la ruta exacta. No existen herramientas "
     "de cambio de contraseñas, bases de datos, DNS ni SSL."
 )
@@ -44,6 +47,7 @@ INSTRUCTIONS = (
 def _implemented_handlers(
     operations: Operations,
     file_operations: FileOperations,
+    upload_tickets: UploadTicketTool,
 ) -> dict[str, ToolHandler]:
     return {
         "list_domains": operations.list_domains,
@@ -55,6 +59,7 @@ def _implemented_handlers(
         "create_file": file_operations.create_file,
         "upload_file": file_operations.upload_file,
         "delete_file": file_operations.delete_file,
+        "create_upload_ticket": upload_tickets.create_upload_ticket,
     }
 
 
@@ -115,11 +120,16 @@ def build_server(
     """Crea el servidor registrando únicamente acciones enabled=true."""
 
     specs = load_actions(actions_path or settings.allowed_actions_path)
-    audit = audit or AuditLogger(settings.audit_path, secrets=(settings.token,))
+    secrets = tuple(
+        secret for secret in (settings.token, settings.upload_admin_secret) if secret
+    )
+    audit = audit or AuditLogger(settings.audit_path, secrets=secrets)
     cpanel_client = client or CPanelClient(settings)
     operations = Operations(cpanel_client)
     file_operations = FileOperations(cpanel_client, settings)
-    handlers = _implemented_handlers(operations, file_operations)
+    handlers = _implemented_handlers(
+        operations, file_operations, UploadTicketTool(settings)
+    )
 
     mcp = FastMCP(
         name="huevohost-cpanel",
@@ -140,7 +150,7 @@ def build_server(
             continue
         handler = handlers[spec.name]
         mcp.add_tool(
-            _wrap_tool(spec, handler, audit, (settings.token,)),
+            _wrap_tool(spec, handler, audit, secrets),
             name=spec.name,
             description=spec.description or None,
         )
