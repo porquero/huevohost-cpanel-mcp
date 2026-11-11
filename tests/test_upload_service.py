@@ -484,3 +484,33 @@ def test_audit_has_metadata_but_no_tokens_or_content(world: World) -> None:
     assert ok["args"]["ip"] == "203.0.113.7"
     failed = next(e for e in uploads if e["outcome"] == "error")
     assert failed["error_code"] == "ticket_used"
+
+
+# ------------------------------------------------------------ configuración
+def test_upload_settings_from_env(tmp_path: Path) -> None:
+    from cpanel_mcp.errors import ConfigError
+    from cpanel_mcp.uploads.settings import load_upload_settings
+
+    env = {
+        "UPLOAD_ADMIN_SECRET": ADMIN,
+        "UPLOAD_PUBLIC_BASE_URL": "https://upload.acopios.cl/",
+        "CPANEL_HOST": "acopios.cl",
+        "CPANEL_USER": "acopios",
+        "CPANEL_TOKEN": "tok-1",
+        "UPLOAD_ACCOUNTS": "acopios=/home/acopios,otra=/home/otra",
+        "CPANEL_TOKEN_OTRA": "tok-2",
+        "UPLOAD_DB_PATH": str(tmp_path / "s.db"),
+    }
+    loaded = load_upload_settings(env)
+    assert loaded.public_base_url == "https://upload.acopios.cl"
+    assert set(loaded.accounts) == {"acopios", "otra"}
+    assert loaded.accounts["otra"].token == "tok-2"
+    assert loaded.allow_zip is False
+    assert ADMIN not in repr(loaded) and "tok-1" not in repr(loaded)
+
+    with pytest.raises(ConfigError, match="UPLOAD_ADMIN_SECRET"):
+        load_upload_settings({**env, "UPLOAD_ADMIN_SECRET": "corto"})
+    with pytest.raises(ConfigError, match="https"):
+        load_upload_settings({**env, "UPLOAD_PUBLIC_BASE_URL": "http://x.cl"})
+    with pytest.raises(ConfigError, match="CPANEL_TOKEN_OTRA"):
+        load_upload_settings({k: v for k, v in env.items() if k != "CPANEL_TOKEN_OTRA"})
