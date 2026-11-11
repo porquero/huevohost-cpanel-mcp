@@ -47,7 +47,7 @@
       "name": "upload_file",
       "level": "escritura_reversible",
       "enabled": true,
-      "description": "Sube un archivo dentro de /public_html usando content (texto) o content_base64 (binario). Si el destino existe y overwrite=true, primero lo mueve a la papelera. Respeta MCP_FILE_MAX_BYTES y bloquea archivos ejecutables."
+      "description": "Sube un archivo dentro de /public_html usando content (texto) o content_base64 (binario). content_base64 se reserva para archivos de hasta unos 5 KB: el modelo debe escribir los bytes en su respuesta y por encima de ese tamaño el base64 suele llegar corrupto. Para fotos, logos, PDFs y fuentes usa create_upload_ticket. Devuelve el sha256 del archivo guardado y acepta expected_sha256 para detectar contenido alterado. Si el destino existe y overwrite=true, primero lo mueve a la papelera. Respeta MCP_FILE_MAX_BYTES y bloquea archivos ejecutables."
     },
     {
       "name": "delete_file",

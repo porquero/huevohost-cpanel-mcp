@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
+import re
 from typing import Any
 
 from .config import Settings
@@ -102,6 +104,62 @@ _BLOCKED_EXTENSIONS = {
     ".sh",
     ".so",
 }
+
+
+_B64_ALPHABET = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+)
+_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+
+
+def validate_expected_sha256(value: object) -> str | None:
+    """Valida un sha256 hexadecimal opcional y lo devuelve en minúsculas."""
+
+    if value is None:
+        return None
+    if not isinstance(value, str) or not _SHA256_PATTERN.fullmatch(value.strip().lower()):
+        raise ValidationError(
+            "expected_sha256 debe ser un sha256 en hexadecimal (64 caracteres)."
+        )
+    return value.strip().lower()
+
+
+def describe_base64_error(compact: str) -> str:
+    """Explica por qué un base64 (sin espacios) no es válido.
+
+    Indica la posición (base 0, sin contar espacios ni saltos de línea) del
+    primer carácter inválido y el estado del padding.
+    """
+
+    body = compact.rstrip("=")
+    padding = len(compact) - len(body)
+    for index, char in enumerate(body):
+        if char not in _B64_ALPHABET:
+            shown = repr(char) if char.isprintable() else f"U+{ord(char):04X}"
+            return (
+                f"content_base64 no es base64 válido: primer carácter inválido "
+                f"{shown} en la posición {index} (base 0, sin contar espacios "
+                f"ni saltos de línea). Longitud: {len(compact)}."
+            )
+
+    expected_padding = (-len(body)) % 4
+    if len(body) % 4 == 1:
+        state = (
+            "la longitud es imposible para base64 (sobra o falta al menos un "
+            "carácter, típico de una cadena truncada)"
+        )
+    elif padding != expected_padding:
+        state = (
+            f"padding incorrecto: tiene {padding} '=' y debería tener "
+            f"{expected_padding}"
+        )
+    else:
+        state = "padding correcto"
+    return (
+        f"content_base64 no es base64 válido, aunque todos los caracteres "
+        f"pertenecen al alfabeto. Longitud: {len(compact)}; {state}. Si el "
+        "archivo pesa más de ~5 KB, usa create_upload_ticket."
+    )
 
 
 def display_path(path: str) -> str:
@@ -579,9 +637,11 @@ class FileOperations:
         content: str | None = None,
         content_base64: str | None = None,
         overwrite: bool = False,
+        expected_sha256: str | None = None,
     ) -> dict[str, Any]:
         normalized = normalize_public_path(path, allow_root=False)
         overwrite = _validate_overwrite(overwrite)
+        expected_hash = validate_expected_sha256(expected_sha256)
 
         if (content is None) == (content_base64 is None):
             raise ValidationError(
@@ -602,15 +662,21 @@ class FileOperations:
                 compact = "".join(content_base64.split())
                 payload = base64.b64decode(compact, validate=True)
             except (binascii.Error, ValueError) as exc:
-                raise ValidationError(
-                    "content_base64 no es base64 válido."
-                ) from exc
+                raise ValidationError(describe_base64_error(compact)) from exc
 
         if len(payload) > self.max_file_bytes:
             raise FileTooLargeError(
                 f"El archivo ocupa {len(payload)} bytes y el límite es "
                 f"{self.max_file_bytes}. Ajusta MCP_FILE_MAX_BYTES o súbelo "
                 "manualmente desde cPanel."
+            )
+
+        digest = hashlib.sha256(payload).hexdigest()
+        if expected_hash is not None and digest != expected_hash:
+            raise ValidationError(
+                "El sha256 del contenido recibido no coincide con "
+                f"expected_sha256 (recibido: {digest}). El contenido llegó "
+                "alterado o incompleto; no se escribió nada."
             )
 
         _, name = _parent_and_name(normalized)
@@ -649,6 +715,7 @@ class FileOperations:
             "overwritten": backed_up,
             "backed_up_to_trash": backed_up,
             "bytes": len(payload),
+            "sha256": digest,
             "verified": verified,
             "message": "Archivo subido a cPanel.",
         }
