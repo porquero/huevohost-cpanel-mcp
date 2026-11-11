@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "actions": [
+    {
+      "name": "list_domains",
+      "level": "lectura",
+      "enabled": true,
+      "description": "Lista el dominio principal, addon domains, parked domains y subdominios de la cuenta cPanel."
+    },
+    {
+      "name": "list_email_accounts",
+      "level": "lectura",
+      "enabled": true,
+      "description": "Lista las cuentas de correo de un dominio alojado en la cuenta cPanel."
+    },
+    {
+      "name": "create_email_account",
+      "level": "escritura_reversible",
+      "enabled": true,
+      "description": "Crea una cuenta de correo. Con execute=false solo devuelve un resumen y no contacta cPanel. Con execute=true crea la cuenta, la verifica y muestra la contraseña una sola vez."
+    },
+    {
+      "name": "create_subdomain",
+      "level": "escritura_reversible",
+      "enabled": true,
+      "description": "Crea un subdominio (por ejemplo blog.lowcode.cl) sobre el dominio principal, un addon domain o un parked domain de la cuenta. No crea addon domains ni parked domains. Con execute=false solo simula y no contacta cPanel. El document root debe estar dentro de /public_html, debe estar libre y el subdominio no puede existir. Al terminar verifica el subdominio en cPanel."
+    },
+    {
+      "name": "list_files",
+      "level": "lectura",
+      "enabled": true,
+      "description": "Lista archivos y directorios dentro de /public_html. Las rutas relativas se interpretan desde /public_html. No sigue enlaces simbólicos."
+    },
+    {
+      "name": "download_file",
+      "level": "lectura",
+      "enabled": true,
+      "description": "Descarga el contenido de un archivo de texto dentro de /public_html (HTML, CSS, JS, JSON, texto). No descarga binarios ni archivos con credenciales. Respeta MCP_FILE_MAX_BYTES."
+    },
+    {
+      "name": "create_file",
+      "level": "escritura_reversible",
+      "enabled": true,
+      "description": "Crea un archivo de texto dentro de /public_html. Si el archivo existe y overwrite=true, primero lo mueve a la papelera de cPanel y luego escribe el nuevo contenido. Bloquea extensiones ejecutables como .php, .cgi y .htaccess."
+    },
+    {
+      "name": "upload_file",
+      "level": "escritura_reversible",
+      "enabled": true,
+      "description": "Sube un archivo dentro de /public_html usando content (texto) o content_base64 (binario). Si el destino existe y overwrite=true, primero lo mueve a la papelera. Respeta MCP_FILE_MAX_BYTES y bloquea archivos ejecutables."
+    },
+    {
+      "name": "delete_file",
+      "level": "alto_impacto",
+      "enabled": true,
+      "description": "Mueve un archivo o directorio de /public_html a la papelera de cPanel, donde puede restaurarse. Exige repetir la ruta exacta en confirm. No permite borrar /public_html completo ni seguir enlaces simbólicos."
+    },
+    {
+      "name": "publish_landing_page",
+      "level": "alto_impacto",
+      "enabled": false,
+      "description": "Fase 2, no implementada. Si se habilita, el servidor falla al arrancar para evitar una acción sin respaldo."
+    }
+  ]
+}

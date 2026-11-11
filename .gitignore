@@ -1,0 +1,27 @@
+# Entorno y secretos
+.venv/
+.env
+.env.*
+!.env.example
+
+# Logs y auditoría
+*.log
+audit.jsonl
+audit-*.jsonl
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Editores y sistema
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
