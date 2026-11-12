@@ -8,11 +8,11 @@ Incluye:
 - Lectura de cuentas de correo por dominio.
 - Creación de cuentas de correo con dry-run por defecto, contraseña aleatoria de 20 caracteres y verificación posterior.
 - Creación de **subdominios** sobre dominios existentes de la cuenta (nunca addon domains ni parked domains), con dry-run por defecto y document root confinado a `/public_html`.
-- Listado y creación de **bases de datos MySQL** vacías, con dry-run por defecto y verificación posterior.
+- **Bases de datos MySQL**: listar y crear bases, crear usuarios con permisos sobre una base y cambiar la contraseña de un usuario (por si se pierde). Dry-run por defecto; las contraseñas las genera el servidor y se muestran una sola vez.
 - Operaciones de archivos confinadas a `/public_html`: listar, descargar texto, crear, subir y mover a la papelera.
 - Subida de **binarios** (fotos, logos, PDFs, fuentes) desde el disco del usuario con `upload_local_file`: los bytes no pasan por el modelo y no se instala nada en la cuenta cPanel.
 
-No incluye cambio de contraseñas, usuarios ni permisos de bases de datos, borrado de bases de datos, DNS ni SSL. La publicación de landings (Fase 2) está solo diseñada. `delete_file` mueve a la papelera de cPanel, no borra de forma permanente.
+No incluye cambio de contraseñas de correo o de cPanel, borrado de bases de datos o usuarios, acceso remoto a MySQL, DNS ni SSL. La publicación de landings (Fase 2) está solo diseñada. `delete_file` mueve a la papelera de cPanel, no borra de forma permanente.
 
 ## Requisitos
 
@@ -63,6 +63,9 @@ Configura las credenciales en las variables de usuario del sistema, no en el rep
     { "name": "create_subdomain", "level": "escritura_reversible", "enabled": true },
     { "name": "list_databases", "level": "lectura", "enabled": true },
     { "name": "create_database", "level": "escritura_reversible", "enabled": true },
+    { "name": "list_database_users", "level": "lectura", "enabled": true },
+    { "name": "create_database_user", "level": "escritura_reversible", "enabled": true },
+    { "name": "change_database_user_password", "level": "alto_impacto", "enabled": true },
     { "name": "list_files", "level": "lectura", "enabled": true },
     { "name": "download_file", "level": "lectura", "enabled": true },
     { "name": "create_file", "level": "escritura_reversible", "enabled": true },
@@ -124,13 +127,38 @@ Crea una base de datos MySQL **vacía**.
 - `execute=false`: no contacta cPanel y devuelve el nombre propuesto.
 - `execute=true`: lee el prefijo y el largo máximo con `Mysql::get_restrictions`, comprueba que la base no exista, la crea y la verifica en `Mysql::list_databases`. Devuelve `created`/`verified` y el nombre completo.
 
-No crea usuarios MySQL, contraseñas ni permisos, y no hay borrado: la base queda sin usuarios. Asígnalos o elimínala desde cPanel → Bases de datos MySQL.
+La base queda sin usuarios: créalos con `create_database_user`. No hay borrado; elimínala desde cPanel → Bases de datos MySQL.
 
 Ejemplo:
 
 ```json
 { "name": "blog", "execute": true }
 ```
+
+### `list_database_users()`
+
+Solo lectura. Devuelve los usuarios MySQL de la cuenta (nombre completo con prefijo) y las bases a las que tiene acceso cada uno. Nunca devuelve contraseñas.
+
+### `create_database_user(user, database, privileges="all", execute=false)`
+
+Crea un usuario MySQL con una **contraseña aleatoria** y le da permisos sobre **una** base existente.
+
+- `user`: sin prefijo; minúsculas, números y guion bajo, empezando por letra. cPanel antepone el prefijo de la cuenta y el total no puede superar 32 caracteres.
+- `database`: la base (con o sin prefijo). Debe existir (créala antes con `create_database`).
+- `privileges`: `all` (por defecto: todos los permisos **solo sobre esa base**, necesarios para instalar WordPress), `read_write` (`SELECT, INSERT, UPDATE, DELETE`) o `read_only` (`SELECT`). Nunca permisos globales.
+- `execute=false`: no contacta cPanel ni genera contraseña. `execute=true`: comprueba base y usuario, crea el usuario, asigna los permisos y verifica.
+- Respuesta: `user`, `database`, `host` (`localhost`), `password` y el resultado de cada paso. **La contraseña se muestra una sola vez**; copia los datos de acceso en ese momento.
+- Si el usuario ya existe, no se modifica nada (para eso, `change_database_user_password`). Si el usuario se crea pero falla el permiso, la respuesta lo indica (`granted: false`) y hay que asignarlo desde cPanel.
+
+### `change_database_user_password(user, confirm, execute=false)`
+
+Para cuando el usuario **perdió la contraseña**: genera una nueva y reemplaza la anterior.
+
+- `user`: usuario MySQL existente (con o sin prefijo). Solo usuarios MySQL, no cuentas de correo ni de cPanel.
+- `execute=false`: simulación, no contacta cPanel. `execute=true` exige además `confirm` igual al nombre indicado en `user`.
+- La nueva contraseña se muestra **una sola vez**. **La anterior deja de funcionar**: un sitio que la use (por ejemplo `DB_PASSWORD` en `wp-config.php`) dejará de conectar hasta que se actualice. El servidor no edita `wp-config.php` (no escribe archivos `.php`).
+
+Las contraseñas se envían a cPanel por POST en el cuerpo de la petición (no en la URL, para que no queden en los registros de acceso) y no se escriben en logs ni auditoría. Quedan, como la de las cuentas de correo, en el historial de la conversación del cliente MCP.
 
 ### Operaciones de archivos
 

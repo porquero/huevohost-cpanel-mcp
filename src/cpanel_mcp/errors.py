@@ -83,6 +83,18 @@ class DatabaseExistsError(CpanelMCPError):
     code = "database_exists"
 
 
+class DatabaseNotFoundError(CpanelMCPError):
+    code = "database_not_found"
+
+
+class DatabaseUserExistsError(CpanelMCPError):
+    code = "database_user_exists"
+
+
+class DatabaseUserNotFoundError(CpanelMCPError):
+    code = "database_user_not_found"
+
+
 class MysqlRoleDisabledError(CPanelError):
     code = "mysql_role_disabled"
 

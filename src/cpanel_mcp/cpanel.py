@@ -17,6 +17,7 @@ from .errors import (
     CPanelProtocolError,
     CPanelTimeoutError,
     DatabaseExistsError,
+    DatabaseUserExistsError,
     DomainNotHostedError,
     FileAlreadyExistsError,
     FileOperationError,
@@ -64,6 +65,13 @@ def _classify_api_error(
     ):
         return SubdomainExistsError(
             "El subdominio ya existe en cPanel. No se modificó nada."
+        )
+
+    if module == "Mysql" and function == "create_user" and (
+        "already exists" in lower or "already in use" in lower
+    ):
+        return DatabaseUserExistsError(
+            "El usuario MySQL ya existe en cPanel. No se modificó nada."
         )
 
     if module == "Mysql" and (
@@ -198,6 +206,20 @@ class CPanelClient:
             params=params,
         )
 
+    async def post(
+        self,
+        module: str,
+        function: str,
+        data: dict[str, Any],
+    ) -> UAPIResult:
+        """Llama a la UAPI con POST y parámetros en el cuerpo del formulario.
+
+        Se usa cuando hay secretos (contraseñas): así no quedan en la URL ni en
+        los registros de acceso de cPanel.
+        """
+
+        return await self._request("POST", module, function, data=data)
+
     async def _request(
         self,
         method: str,
@@ -205,6 +227,7 @@ class CPanelClient:
         function: str,
         *,
         params: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
         files: dict[str, Any] | None = None,
     ) -> UAPIResult:
         url = f"{self._settings.base_url}/execute/{module}/{function}"
@@ -217,6 +240,7 @@ class CPanelClient:
                 method,
                 url,
                 params=params or {},
+                data=data,
                 files=files,
                 headers=headers,
             )
@@ -437,6 +461,36 @@ class CPanelClient:
                 "Mysql::get_restrictions devolvió un formato inesperado."
             )
         return data
+
+    async def list_database_users(self) -> list[dict[str, Any]]:
+        result = await self.call("Mysql", "list_users", {})
+        data = result.data or []
+        if not isinstance(data, list):
+            raise CPanelProtocolError(
+                "Mysql::list_users devolvió un formato inesperado."
+            )
+        return [item for item in data if isinstance(item, dict)]
+
+    async def create_database_user(self, name: str, password: str) -> UAPIResult:
+        return await self.post(
+            "Mysql", "create_user", {"name": name, "password": password}
+        )
+
+    async def set_database_user_password(
+        self, user: str, password: str
+    ) -> UAPIResult:
+        return await self.post(
+            "Mysql", "set_password", {"user": user, "password": password}
+        )
+
+    async def set_privileges_on_database(
+        self, user: str, database: str, privileges: str
+    ) -> UAPIResult:
+        return await self.call(
+            "Mysql",
+            "set_privileges_on_database",
+            {"user": user, "database": database, "privileges": privileges},
+        )
 
     async def create_database(self, name: str) -> UAPIResult:
         return await self.call("Mysql", "create_database", {"name": name})

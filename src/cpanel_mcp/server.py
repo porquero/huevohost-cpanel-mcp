@@ -43,9 +43,11 @@ INSTRUCTIONS = (
     "carpeta, o cópialo tú si tienes herramientas de archivos locales. "
     "No pases base64 largo por upload_file. delete_file mueve a la "
     "papelera de cPanel y exige confirmar la ruta exacta. No existen herramientas "
-    "de cambio de contraseñas, usuarios o permisos de bases de datos, borrado de "
-    "bases de datos, DNS ni SSL. create_database también es una simulación salvo "
-    "execute=true y solo crea una base de datos MySQL vacía (sin usuarios)."
+    "de cambio de contraseñas de cuentas de correo o de cPanel, borrado de bases de "
+    "datos, DNS ni SSL. create_database, create_database_user y "
+    "change_database_user_password son simulaciones salvo execute=true; las dos "
+    "últimas generan una contraseña que se muestra una sola vez: entrégasela al "
+    "usuario en ese momento, no la repitas después."
 )
 
 
@@ -60,6 +62,9 @@ def _implemented_handlers(
         "create_subdomain": operations.create_subdomain,
         "list_databases": operations.list_databases,
         "create_database": operations.create_database,
+        "list_database_users": operations.list_database_users,
+        "create_database_user": operations.create_database_user,
+        "change_database_user_password": operations.change_database_user_password,
         "list_files": file_operations.list_files,
         "download_file": file_operations.download_file,
         "create_file": file_operations.create_file,

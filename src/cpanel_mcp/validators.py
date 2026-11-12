@@ -119,6 +119,57 @@ def validate_database_name(value: object) -> str:
     return name
 
 
+_DATABASE_USER_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+_EXISTING_DATABASE_USER_RE = re.compile(r"^[A-Za-z0-9_]{1,80}$")
+PRIVILEGE_LEVELS = {
+    # Permisos siempre por base, nunca globales ni GRANT OPTION.
+    "all": "ALL PRIVILEGES",
+    "read_write": "SELECT,INSERT,UPDATE,DELETE",
+    "read_only": "SELECT",
+}
+
+
+def validate_database_user_name(value: object) -> str:
+    """Valida el nombre de un usuario MySQL nuevo, sin el prefijo de la cuenta."""
+
+    if not isinstance(value, str):
+        raise ValidationError("El nombre del usuario de base de datos debe ser texto.")
+    name = value.strip()
+    if not name:
+        raise ValidationError(
+            "El nombre del usuario de base de datos no puede estar vacío."
+        )
+    if not _DATABASE_USER_RE.fullmatch(name):
+        raise ValidationError(
+            "El usuario de base de datos solo puede contener minúsculas, números "
+            "y guion bajo, y debe empezar con una letra (máximo 32 caracteres "
+            "contando el prefijo de la cuenta). Sin espacios, guiones ni comillas."
+        )
+    return name
+
+
+def validate_existing_database_user_ref(value: object) -> str:
+    """Referencia a un usuario MySQL existente (con o sin prefijo)."""
+
+    if not isinstance(value, str):
+        raise ValidationError("El usuario de base de datos debe ser texto.")
+    name = value.strip()
+    if not _EXISTING_DATABASE_USER_RE.fullmatch(name):
+        raise ValidationError(
+            "El usuario de base de datos solo puede contener letras, números y "
+            "guion bajo."
+        )
+    return name
+
+
+def validate_privilege_level(value: object) -> str:
+    if not isinstance(value, str) or value not in PRIVILEGE_LEVELS:
+        raise ValidationError(
+            "privileges debe ser uno de: " + ", ".join(PRIVILEGE_LEVELS) + "."
+        )
+    return value
+
+
 def validate_quota_mb(value: object) -> int:
     if type(value) is not int:
         raise ValidationError("La cuota debe ser un número entero de MB.")

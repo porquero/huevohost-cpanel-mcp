@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPanel de Huevohost: listar dominios, listar y crear cuentas de correo, crear subdominios sobre dominios existentes, listar y crear bases de datos MySQL vacías, y listar, descargar, crear, subir (texto, base64 pequeño o binarios desde el disco local) y mover a la papelera archivos dentro de `/public_html`. Fase 2 está solo diseñada: publicar landings en subdominios.
+Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPanel de Huevohost: listar dominios, listar y crear cuentas de correo, crear subdominios sobre dominios existentes, listar y crear bases de datos MySQL, crear usuarios MySQL con permisos sobre una base y cambiar su contraseña, y listar, descargar, crear, subir (texto, base64 pequeño o binarios desde el disco local) y mover a la papelera archivos dentro de `/public_html`. Fase 2 está solo diseñada: publicar landings en subdominios.
 
 ## Seguridad obligatoria
 
@@ -10,9 +10,9 @@ Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPane
 - Nunca escribas tokens, contraseñas ni cabeceras `Authorization` en el repositorio, logs, auditoría, mensajes de error, tests o respuestas.
 - Los logs de depuración van **solo a stderr**. `stdout` está reservado para el protocolo JSON-RPC de MCP. No uses `print()` hacia stdout en el servidor; los errores de arranque se escriben directamente en `sys.stderr`.
 - `audit.jsonl` registra fecha, acción, argumentos saneados y resultado. Nunca incluye contraseñas, tokens ni el contenido de los archivos (`content`, `content_base64`, etc. se redactan).
-- No expongas herramientas de cambio de contraseñas, usuarios o permisos de bases de datos, borrado de bases de datos, DNS ni SSL. `list_databases` y `create_database` existen por petición explícita del usuario (solo listar y crear bases vacías). `delete_file` existe por petición explícita y solo mueve a la papelera de cPanel.
+- No expongas herramientas de cambio de contraseñas de correo o de cPanel, borrado de bases de datos o usuarios, DNS ni SSL. Las herramientas de bases de datos y usuarios MySQL existen por petición explícita del usuario. `delete_file` existe por petición explícita y solo mueve a la papelera de cPanel.
 - `allowed_actions.json` es la fuente de verdad. Solo se registran las acciones con `enabled=true`. Si se habilita una acción no implementada, el servidor debe fallar cerrado.
-- Las acciones de nivel `alto_impacto` se entregan desactivadas por defecto, salvo `delete_file`, habilitada explícitamente por el usuario y limitada a la papelera.
+- Las acciones de nivel `alto_impacto` se entregan desactivadas por defecto, salvo `delete_file` (limitada a la papelera) y `change_database_user_password`, habilitadas explícitamente por el usuario.
 - La creación real de correo exige `execute=true`. El dry-run no debe hacer peticiones HTTP ni generar contraseña.
 - La contraseña generada se muestra una sola vez en la respuesta de creación y no se vuelve a registrar.
 
@@ -28,10 +28,14 @@ Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPane
 
 ## Reglas de bases de datos
 
-- Solo existen `list_databases` (lectura) y `create_database`. No añadas creación de usuarios MySQL, contraseñas, `GRANT`/permisos, borrado, importación ni acceso a datos: esos pasos se hacen desde cPanel.
-- `create_database` exige `execute=true` para actuar. El dry-run no hace peticiones HTTP.
-- `name` va sin prefijo: solo `[a-z][a-z0-9_]*` (máx. 63). El prefijo de la cuenta se obtiene de `Mysql::get_restrictions` (nunca se asume ni se acepta del modelo), se valida y se respeta el largo máximo que informe cPanel.
-- Antes de crear se comprueba con `Mysql::list_databases` que no exista; tras crear se verifica con el mismo listado. Una base existente nunca se modifica.
+- Herramientas existentes: `list_databases`, `create_database`, `list_database_users`, `create_database_user` y `change_database_user_password`. No añadas borrado de bases o usuarios, `GRANT` libre, permisos globales o con `GRANT OPTION`, acceso remoto (`Mysql::add_host`), importación/exportación ni acceso a los datos: esos pasos se hacen desde cPanel.
+- Las acciones que escriben exigen `execute=true`; el dry-run no hace peticiones HTTP ni genera contraseña.
+- Los nombres van sin prefijo (`[a-z][a-z0-9_]*`; usuarios máx. 32 contando el prefijo). El prefijo y los largos máximos salen de `Mysql::get_restrictions` (`prefix`, `max_username_length`, `max_database_name_length`); nunca se asumen ni se aceptan del modelo, y el prefijo se valida.
+- Antes de crear se comprueba con `Mysql::list_databases` / `Mysql::list_users`; lo existente nunca se modifica y las bases y usuarios nuevos se verifican con esos mismos listados.
+- Los permisos son siempre por base y de tres niveles fijos (`all`, `read_write`, `read_only`); el modelo no pasa listas de privilegios.
+- Las contraseñas las genera el servidor (24 caracteres alfanuméricos); nunca se aceptan del modelo ni del usuario. Se envían por **POST en el cuerpo** (nunca en la URL), se muestran **una sola vez** en la respuesta y no aparecen en auditoría, logs ni mensajes de error. Si falla el permiso tras crear el usuario, se devuelve un resultado parcial con la contraseña y un `warning` (no un error).
+- `change_database_user_password` es de nivel `alto_impacto`: exige `execute=true` y `confirm` igual al usuario indicado, solo actúa sobre usuarios MySQL existentes y avisa de que los sitios que usen la contraseña anterior dejarán de conectar.
+- Los nombres de campo de la UAPI de MySQL se verificaron con `scripts/verify_mysql_api.py` (solo lectura). El formato de `privileges` de `set_privileges_on_database` solo se comprueba creando un usuario de prueba real (ver la checklist).
 
 ## Reglas de archivos
 

@@ -98,6 +98,19 @@ Comprobaciones adicionales:
 - [ ] Un nombre que supere el largo máximo (con prefijo) se rechaza con un mensaje claro.
 - [ ] La base creada no tiene usuarios; elimínala manualmente desde cPanel al terminar la prueba.
 
+Usuarios MySQL (usa la base de prueba anterior y un usuario de prueba, p. ej. `mcp_prueba`):
+
+- [ ] `list_database_users` devuelve los usuarios existentes con sus bases y sin contraseñas.
+- [ ] `create_database_user` con `execute=false` no crea nada ni genera contraseña.
+- [ ] `create_database_user` con `execute=true` devuelve `user_created: true`, `granted: true`, `verified: true`, `host: "localhost"` y una contraseña de 24 caracteres; en cPanel → Bases de datos MySQL el usuario aparece con permisos sobre la base. **Aquí se confirma por primera vez el formato de `privileges` en `set_privileges_on_database`: si `granted` sale `false`, anota el mensaje de cPanel.**
+- [ ] Probar `privileges: "read_only"` con otro usuario de prueba y comprobar en cPanel que solo tiene `SELECT`.
+- [ ] Repetir la creación del mismo usuario devuelve «ya existe» y no cambia nada.
+- [ ] `change_database_user_password` con `execute=false` no contacta cPanel.
+- [ ] Con `execute=true` y `confirm` incorrecto se rechaza sin cambiar nada.
+- [ ] Con `confirm` correcto devuelve una contraseña nueva, y la anterior deja de funcionar (compruébalo conectando con ambas).
+- [ ] Ni `audit.jsonl` ni los logs contienen ninguna de las contraseñas generadas.
+- [ ] Elimina el usuario y la base de prueba desde cPanel al terminar.
+
 ## 5. Archivos en /public_html
 
 Primero solo lectura:

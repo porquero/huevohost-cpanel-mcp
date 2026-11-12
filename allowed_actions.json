@@ -38,6 +38,24 @@
       "description": "Crea una base de datos MySQL vacía. Recibe name sin prefijo (minúsculas, números y guion bajo; cPanel antepone el prefijo de la cuenta). Con execute=false solo simula y no contacta cPanel. Con execute=true comprueba que no exista, la crea y la verifica. No crea usuarios, contraseñas ni permisos, y no existe borrado: se gestiona desde cPanel."
     },
     {
+      "name": "list_database_users",
+      "level": "lectura",
+      "enabled": true,
+      "description": "Lista los usuarios MySQL de la cuenta cPanel y las bases de datos a las que tiene acceso cada uno. Solo lectura; nunca devuelve contraseñas."
+    },
+    {
+      "name": "create_database_user",
+      "level": "escritura_reversible",
+      "enabled": true,
+      "description": "Crea un usuario MySQL con una contraseña aleatoria y le da permisos sobre UNA base de datos existente. user va sin prefijo (minúsculas, números y guion bajo; cPanel antepone el de la cuenta). database es la base (con o sin prefijo). privileges: 'all' (por defecto; todos los permisos sobre esa base, necesario para instalar WordPress), 'read_write' (SELECT, INSERT, UPDATE, DELETE) o 'read_only'. Con execute=false solo simula y no contacta cPanel. Con execute=true la contraseña se muestra UNA sola vez en la respuesta: entrégala al usuario junto con servidor (localhost), base y usuario. No modifica usuarios existentes ni da permisos globales ni acceso remoto."
+    },
+    {
+      "name": "change_database_user_password",
+      "level": "alto_impacto",
+      "enabled": true,
+      "description": "Cambia la contraseña de un usuario MySQL existente por una aleatoria nueva, por ejemplo cuando el usuario perdió la anterior. Con execute=false solo simula. Con execute=true exige repetir el nombre del usuario en confirm y muestra la nueva contraseña UNA sola vez. La contraseña anterior deja de funcionar: los sitios que la usen (p. ej. DB_PASSWORD en wp-config.php) dejarán de conectar hasta que se actualicen. Solo usuarios MySQL, no cuentas de correo ni de cPanel."
+    },
+    {
       "name": "list_files",
       "level": "lectura",
       "enabled": true,

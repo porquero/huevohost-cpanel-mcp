@@ -273,13 +273,10 @@ async def test_tools_registered_with_expected_schema(settings: Settings) -> None
     schema = tools["create_database"].inputSchema
     assert schema["required"] == ["name"]
     assert schema["properties"]["execute"]["default"] is False
-    # Solo listar y crear: nada de borrado, usuarios ni permisos.
-    forbidden = ("drop", "delete_database", "user", "grant", "password")
+    # Nunca borrado de bases, GRANT libre ni acceso remoto.
+    forbidden = ("drop", "delete_database", "grant", "remote", "add_host")
     assert not [
-        name
-        for name in tools
-        if any(word in name for word in forbidden) and name != "create_email_account"
-        and name != "delete_file"
+        name for name in tools if any(word in name for word in forbidden)
     ]
 
 

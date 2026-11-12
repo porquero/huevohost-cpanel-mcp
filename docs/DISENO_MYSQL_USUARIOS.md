@@ -1,6 +1,6 @@
 # Diseño: usuarios y permisos de bases de datos MySQL
 
-**Estado: solo diseño, nada implementado.** Implementarlo exige aprobación explícita y cambiar `CLAUDE.md`, que hoy prohíbe usuarios y permisos de bases de datos (ver «Cambios de reglas»).
+**Estado: implementado, con cambios respecto a este borrador.** Se implementaron `list_database_users`, `create_database_user` (nivel por defecto `all`) y `change_database_user_password` (alto_impacto, con `confirm`), por petición del usuario para cubrir la pérdida de contraseñas. **No** se implementó `grant_database_access`. Los nombres de campo de la UAPI se verificaron con `scripts/verify_mysql_api.py` (`prefix`, `max_username_length`, `max_database_name_length`; `list_users` devuelve `user`, `shortuser`, `databases`; `create_user` pide `name` y `password`; `set_password` pide `user` y `password`). Las contraseñas viajan por POST en el cuerpo. Queda sin verificar solo el formato de `privileges` en `set_privileges_on_database`, que se comprueba con la checklist manual. Las reglas vigentes están en `CLAUDE.md`; este documento se conserva como registro del diseño original.
 
 ## Objetivo
 

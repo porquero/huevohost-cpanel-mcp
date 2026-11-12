@@ -12,6 +12,9 @@ from .errors import (
     AccountExistsError,
     CPanelError,
     DatabaseExistsError,
+    DatabaseNotFoundError,
+    DatabaseUserExistsError,
+    DatabaseUserNotFoundError,
     DomainNotHostedError,
     FileAlreadyExistsError,
     SubdomainExistsError,
@@ -25,7 +28,11 @@ from .file_ops import (
     normalize_public_path,
 )
 from .validators import (
+    PRIVILEGE_LEVELS,
     validate_database_name,
+    validate_database_user_name,
+    validate_existing_database_user_ref,
+    validate_privilege_level,
     validate_domain,
     validate_execute,
     validate_quota_mb,
@@ -66,6 +73,42 @@ def generate_password(length: int = _PASSWORD_LENGTH) -> str:
             and any(char in _PASSWORD_SYMBOLS for char in password)
         ):
             return password
+
+
+_DB_PASSWORD_LENGTH = 24
+_DB_PASSWORD_ALPHABET = string.ascii_letters + string.digits
+
+
+def generate_database_password(length: int = _DB_PASSWORD_LENGTH) -> str:
+    """Contraseña alfanumérica: se pega en wp-config.php, .env o URLs sin escapes."""
+
+    if length < 16:
+        raise ValueError("La longitud mínima de contraseña de base de datos es 16.")
+    while True:
+        password = "".join(
+            secrets.choice(_DB_PASSWORD_ALPHABET) for _ in range(length)
+        )
+        if (
+            any(char in string.ascii_lowercase for char in password)
+            and any(char in string.ascii_uppercase for char in password)
+            and any(char in string.digits for char in password)
+        ):
+            return password
+
+
+def _validated_prefix(restrictions: dict[str, Any]) -> str:
+    prefix = restrictions.get("prefix")
+    prefix = prefix.strip() if isinstance(prefix, str) else ""
+    if prefix and not all(char.isalnum() or char == "_" for char in prefix):
+        raise CPanelError(
+            "cPanel devolvió un prefijo de base de datos con caracteres "
+            "inesperados. No se creó nada."
+        )
+    return prefix
+
+
+def _with_prefix(name: str, prefix: str) -> str:
+    return name if prefix and name.startswith(prefix) else prefix + name
 
 
 def _string_list(value: Any) -> list[str]:
@@ -215,14 +258,8 @@ class Operations:
             }
 
         restrictions = await self.client.get_mysql_restrictions()
-        prefix = restrictions.get("prefix")
-        prefix = prefix.strip() if isinstance(prefix, str) else ""
-        if prefix and not all(char.isalnum() or char == "_" for char in prefix):
-            raise CPanelError(
-                "cPanel devolvió un prefijo de base de datos con caracteres "
-                "inesperados. No se creó nada."
-            )
-        full_name = name if prefix and name.startswith(prefix) else prefix + name
+        prefix = _validated_prefix(restrictions)
+        full_name = _with_prefix(name, prefix)
 
         max_length = restrictions.get("max_database_name_length")
         if isinstance(max_length, int) and not isinstance(max_length, bool):
@@ -276,6 +313,231 @@ class Operations:
                 warning += f" Detalle: {verification_error}"
             result["warning"] = warning
         return result
+
+    async def list_database_users(self) -> dict[str, Any]:
+        """Lista los usuarios MySQL y las bases a las que tienen acceso."""
+
+        items = await self.client.list_database_users()
+        users: list[dict[str, Any]] = []
+        for item in items:
+            name = item.get("user")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            databases = item.get("databases")
+            users.append(
+                {
+                    "user": name.strip(),
+                    "databases": sorted(
+                        db for db in (databases or []) if isinstance(db, str)
+                    ),
+                }
+            )
+        users.sort(key=lambda user: user["user"])
+        return {"count": len(users), "users": users}
+
+    async def create_database_user(
+        self,
+        user: str,
+        database: str,
+        privileges: str = "all",
+        execute: bool = False,
+    ) -> dict[str, Any]:
+        """Crea un usuario MySQL con contraseña generada y permisos sobre una base."""
+
+        user = validate_database_user_name(user)
+        database = validate_database_name(database)
+        privileges = validate_privilege_level(privileges)
+        execute = validate_execute(execute)
+
+        if not execute:
+            return {
+                "dry_run": True,
+                "user": user,
+                "database": database,
+                "privileges": privileges,
+                "user_created": False,
+                "granted": False,
+                "verified": False,
+                "message": (
+                    "Simulación: no se contactó cPanel y no se generó "
+                    "contraseña. Al ejecutar, cPanel antepone el prefijo de la "
+                    "cuenta, se comprueba que la base exista y el usuario no, "
+                    "se crea el usuario con una contraseña aleatoria y se le "
+                    f"dan permisos ({privileges}) solo sobre esa base."
+                ),
+            }
+
+        restrictions = await self.client.get_mysql_restrictions()
+        prefix = _validated_prefix(restrictions)
+        full_user = _with_prefix(user, prefix)
+        full_database = _with_prefix(database, prefix)
+
+        max_length = restrictions.get("max_username_length")
+        if (
+            isinstance(max_length, int)
+            and not isinstance(max_length, bool)
+            and len(full_user) > max_length
+        ):
+            raise ValidationError(
+                f"'{full_user}' tiene {len(full_user)} caracteres y cPanel "
+                f"permite como máximo {max_length} para usuarios MySQL "
+                f"(incluido el prefijo '{prefix}'). Usa un nombre más corto."
+            )
+
+        if not self._database_exists(
+            await self.client.list_databases(), full_database
+        ):
+            raise DatabaseNotFoundError(
+                f"La base de datos '{full_database}' no existe. Créala primero "
+                "con create_database. No se modificó nada."
+            )
+        if self._user_entry(await self.client.list_database_users(), full_user):
+            raise DatabaseUserExistsError(
+                f"El usuario '{full_user}' ya existe. No se modificó nada; usa "
+                "change_database_user_password si perdió su contraseña."
+            )
+
+        password = generate_database_password()
+        try:
+            await self.client.create_database_user(full_user, password)
+        except DatabaseUserExistsError:
+            raise DatabaseUserExistsError(
+                f"El usuario '{full_user}' ya existe. No se modificó nada."
+            ) from None
+
+        granted = False
+        grant_error: str | None = None
+        try:
+            await self.client.set_privileges_on_database(
+                full_user, full_database, PRIVILEGE_LEVELS[privileges]
+            )
+            granted = True
+        except CPanelError as exc:
+            grant_error = str(exc)
+
+        verified = False
+        if granted:
+            try:
+                entry = self._user_entry(
+                    await self.client.list_database_users(), full_user
+                )
+                verified = bool(entry) and full_database in (
+                    entry.get("databases") or []
+                )
+            except CPanelError:
+                verified = False
+
+        result: dict[str, Any] = {
+            "dry_run": False,
+            "user": full_user,
+            "database": full_database,
+            "privileges": privileges,
+            "host": "localhost",
+            "user_created": True,
+            "granted": granted,
+            "verified": verified,
+            "password": password,
+            "message": (
+                "Usuario creado. Guarda la contraseña ahora: se muestra una "
+                "sola vez y no se registra en logs ni auditoría. Para conectar "
+                f"usa servidor localhost, base {full_database} y usuario "
+                f"{full_user}."
+            ),
+        }
+        if not granted:
+            result["warning"] = (
+                "El usuario se creó, pero NO se pudieron asignar permisos sobre "
+                f"'{full_database}'. Asígnalos desde cPanel → Bases de datos "
+                f"MySQL. Detalle: {grant_error}"
+            )
+        elif not verified:
+            result["warning"] = (
+                "cPanel aceptó los permisos, pero el usuario aún no aparece "
+                f"asociado a '{full_database}' en la verificación. Revisa cPanel."
+            )
+        return result
+
+    async def change_database_user_password(
+        self,
+        user: str,
+        confirm: str = "",
+        execute: bool = False,
+    ) -> dict[str, Any]:
+        """Genera una contraseña nueva para un usuario MySQL existente."""
+
+        user = validate_existing_database_user_ref(user)
+        execute = validate_execute(execute)
+
+        if not execute:
+            return {
+                "dry_run": True,
+                "user": user,
+                "password_changed": False,
+                "message": (
+                    "Simulación: no se contactó cPanel y no se generó "
+                    "contraseña. Al ejecutar se reemplazará la contraseña del "
+                    "usuario por una aleatoria nueva. Los sitios que usen la "
+                    "contraseña anterior dejarán de conectar hasta que se "
+                    "actualicen. Para ejecutar repite el nombre del usuario en "
+                    "confirm y usa execute=true."
+                ),
+            }
+
+        if not isinstance(confirm, str) or confirm.strip() != user:
+            raise ValidationError(
+                "Falta la confirmación. Para cambiar la contraseña escribe "
+                f"exactamente '{user}' en confirm."
+            )
+
+        restrictions = await self.client.get_mysql_restrictions()
+        prefix = _validated_prefix(restrictions)
+        users = await self.client.list_database_users()
+        entry = self._user_entry(users, user) or self._user_entry(
+            users, _with_prefix(user, prefix)
+        )
+        if not entry:
+            raise DatabaseUserNotFoundError(
+                f"El usuario MySQL '{user}' no existe en esta cuenta. Revisa "
+                "los nombres con list_database_users. No se modificó nada."
+            )
+        full_user = entry["user"]
+
+        password = generate_database_password()
+        await self.client.set_database_user_password(full_user, password)
+
+        databases = sorted(
+            db for db in (entry.get("databases") or []) if isinstance(db, str)
+        )
+        return {
+            "dry_run": False,
+            "user": full_user,
+            "databases": databases,
+            "host": "localhost",
+            "password_changed": True,
+            "password": password,
+            "message": (
+                "Contraseña cambiada. Guárdala ahora: se muestra una sola vez y "
+                "no se registra en logs ni auditoría."
+            ),
+            "warning": (
+                "La contraseña anterior ya no funciona. Actualiza los sitios que "
+                "usen este usuario (por ejemplo DB_PASSWORD en wp-config.php) o "
+                "dejarán de conectar a la base de datos."
+            ),
+        }
+
+    @staticmethod
+    def _user_entry(
+        items: list[dict[str, Any]], name: str
+    ) -> dict[str, Any] | None:
+        for item in items:
+            value = item.get("user")
+            if isinstance(value, str) and value.strip() == name:
+                return {
+                    "user": value.strip(),
+                    "databases": item.get("databases") or [],
+                }
+        return None
 
     @staticmethod
     def _database_exists(items: list[dict[str, Any]], name: str) -> bool:
