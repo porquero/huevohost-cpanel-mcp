@@ -187,7 +187,7 @@ Edita `claude_desktop_config.json` y añade el servidor. Ajusta las rutas absolu
         "CPANEL_USER": "usuario",
         "CPANEL_TOKEN": "TU_TOKEN",
         "CPANEL_VERIFY_SSL": "true",
-        "MCP_FILE_MAX_BYTES": "1048576",
+        "MCP_FILE_MAX_BYTES": "5242880",
         "ALLOWED_ACTIONS_PATH": "C:\\ruta\\a\\cpanel-api-open\\allowed_actions.json",
         "AUDIT_LOG_PATH": "C:\\Users\\TU_USUARIO\\AppData\\Local\\Huevohost\\cpanel-mcp\\audit.jsonl"
       }
