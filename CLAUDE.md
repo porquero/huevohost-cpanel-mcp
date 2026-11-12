@@ -80,6 +80,7 @@ py -3.11 -m venv .venv
 
 - Las pruebas unitarias usan `httpx.MockTransport`; no deben llamar a cPanel.
 - Toda nueva acción debe tener pruebas de: validación, dry-run, ejecución simulada, auditoría sin secretos y registro condicionado por `enabled`.
+- **Nunca llames a funciones de escritura de la UAPI «sin parámetros» para descubrir su firma.** Algunas se ejecutan con valores por defecto: `WordPressSite::create` encoló una instalación de WordPress real en la cuenta. Para conocer una función de escritura usa la documentación oficial o una cuenta de pruebas; contra la cuenta real solo se hacen lecturas.
 - No debilites validaciones, timeout, TLS ni el filtro de secretos para hacer pasar una prueba.
 - La verificación contra la cuenta real se hace con `scripts/mcp_smoke.py` y la checklist manual.
 
