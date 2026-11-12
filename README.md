@@ -166,7 +166,7 @@ Las contraseñas se envían a cPanel por POST en el cuerpo de la petición (no e
 
 Deja los archivos de WordPress listos en un directorio vacío de `/public_html` (normalmente el de un subdominio recién creado). **No instala WordPress**: el usuario completa la instalación en el navegador. Guía completa en [docs/INSTALAR_WORDPRESS.md](docs/INSTALAR_WORDPRESS.md).
 
-- `directory`: relativo a `/public_html`; debe existir, estar vacío (se toleran `cgi-bin` y `.well-known`) y no ser `/public_html`.
+- `directory`: relativo a `/public_html`; debe existir, estar vacío y no ser `/public_html`. Se toleran y conservan sin cambios `.htaccess`, `.user.ini`, `php.ini`, `cgi-bin` y `.well-known`, que el hosting crea en cada subdominio nuevo.
 - `execute=false`: no contacta cPanel ni wordpress.org. `execute=true`: descarga `latest.zip` de wordpress.org en este equipo y verifica su SHA-1 oficial, lo valida, lo sube como un solo archivo, lo extrae en el servidor y envía el zip a la papelera.
 - Devuelve `version`, `site_url` (si el directorio es el de un subdominio), `verified` y `next_steps`.
 - Es la única herramienta que deja archivos PHP en la cuenta, y solo los del paquete oficial verificado. La subida y la extracción usan un timeout de 300 s en lugar de 30 s.

@@ -116,7 +116,8 @@ Usuarios MySQL (usa la base de prueba anterior y un usuario de prueba, p. ej. `m
 Usa un subdominio de prueba nuevo (p. ej. `wptk.example.com`) y una base y un usuario nuevos.
 
 - [ ] `prepare_wordpress` con `execute=false` no contacta cPanel ni wordpress.org.
-- [ ] Sobre un directorio **con contenido** se rechaza («no está vacío») sin descargar nada.
+- [ ] Sobre un directorio **con contenido** (p. ej. un `index.html`) se rechaza («no está vacío») sin descargar nada.
+- [ ] Un subdominio recién creado (con `.htaccess`, `.user.ini` y `php.ini` del hosting) sí se acepta y esos archivos se conservan (`kept_existing`).
 - [ ] Sobre un directorio inexistente se rechaza y sugiere `create_subdomain`.
 - [ ] Con `execute=true` sobre el directorio vacío devuelve `prepared: true`, `verified: true`, la versión y `site_url`.
 - [ ] En cPanel el directorio tiene `wp-admin`, `wp-content`, `wp-includes`, `wp-config-sample.php`, etc., **sin** carpeta `wordpress/` anidada, y no queda ningún `wordpress-install-*.zip`; el zip está en la papelera.

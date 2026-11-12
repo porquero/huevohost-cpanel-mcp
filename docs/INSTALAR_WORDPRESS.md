@@ -26,7 +26,7 @@ WordPress crea `wp-config.php` por sí mismo en ese asistente; el MCP nunca escr
 
 ## Garantías y límites
 
-- **Directorio vacío.** `prepare_wordpress` rechaza cualquier directorio con contenido (solo tolera `cgi-bin` y `.well-known`) antes de descargar nada: nunca mezcla ni sobrescribe un sitio.
+- **Directorio vacío.** `prepare_wordpress` rechaza cualquier directorio con contenido antes de descargar nada: nunca mezcla ni sobrescribe un sitio. Solo tolera, y conserva sin cambios, la configuración que el hosting crea en cada subdominio nuevo (`.htaccess`, `.user.ini`, `php.ini`, `cgi-bin`, `.well-known`); un paquete que intentara incluir esos archivos se descarta. Se comprobó en un subdominio real: un docroot recién creado ya trae `.htaccess`, `.user.ini` y `php.ini`.
 - **Paquete verificado.** URL fija de wordpress.org, SHA-1 oficial comprobado y zip validado (rutas, enlaces simbólicos, tamaños). Si algo falla, no se sube nada.
 - **Sin borrado.** Si la extracción falla a medias, el directorio puede quedar con archivos parciales: hay que vaciarlo desde cPanel antes de reintentar (el MCP no borra directorios).
 - **Después de instalar**, las actualizaciones y la seguridad del sitio son responsabilidad del usuario (WordPress las ofrece desde `/wp-admin`). Conviene decírselo al entregar los datos.

@@ -228,6 +228,65 @@ async def test_harmless_default_entries_are_allowed() -> None:
     assert result["prepared"] is True
 
 
+HOSTING_DEFAULTS = {
+    "public_html/site/.htaccess": "# php handler",
+    "public_html/site/.user.ini": "memory_limit=256M",
+    "public_html/site/php.ini": "display_errors=Off",
+}
+
+
+async def test_hosting_config_files_are_tolerated_and_kept_untouched() -> None:
+    """Un subdominio nuevo trae .htaccess, .user.ini y php.ini (verificado en vivo)."""
+
+    client = site_client(files=dict(HOSTING_DEFAULTS))
+    result = await installer(client, FakeWordPressOrg()).prepare_wordpress(
+        "site", execute=True
+    )
+    assert result["prepared"] is True and result["verified"] is True
+    assert result["kept_existing"] == [".htaccess", ".user.ini", "php.ini"]
+    assert ".htaccess" in result["message"]
+    for path, content in HOSTING_DEFAULTS.items():
+        assert client.files[path] == content
+    assert "public_html/site/wp-load.php" in client.files
+
+
+async def test_clean_directory_reports_nothing_kept() -> None:
+    result = await installer(site_client(), FakeWordPressOrg()).prepare_wordpress(
+        "site", execute=True
+    )
+    assert result["kept_existing"] == []
+
+
+async def test_tolerated_config_does_not_excuse_real_content() -> None:
+    client = site_client(files={**HOSTING_DEFAULTS, "public_html/site/index.html": "hola"})
+    org = FakeWordPressOrg()
+    with pytest.raises(FileAlreadyExistsError, match="index.html") as info:
+        await installer(client, org).prepare_wordpress("site", execute=True)
+    assert ".htaccess" not in str(info.value)
+    assert org.requests == []
+
+
+async def test_a_symlinked_config_file_is_not_tolerated() -> None:
+    client = site_client(
+        files={"public_html/site/php.ini": "x"},
+        symlinks={"public_html/site/.htaccess"},
+    )
+    org = FakeWordPressOrg()
+    with pytest.raises(FileAlreadyExistsError, match=r"\.htaccess"):
+        await installer(client, org).prepare_wordpress("site", execute=True)
+    assert org.requests == []
+
+
+@pytest.mark.parametrize("name", [".htaccess", ".user.ini", "php.ini"])
+async def test_package_that_would_overwrite_hosting_config_is_discarded(name: str) -> None:
+    client = site_client(files=dict(HOSTING_DEFAULTS))
+    org = FakeWordPressOrg(build_zip({f"wordpress/{name}": b"malicioso"}))
+    with pytest.raises(WordPressPackageError, match="configuración del hosting"):
+        await installer(client, org).prepare_wordpress("site", execute=True)
+    assert client.files == HOSTING_DEFAULTS
+    assert "upload_file" not in [call for call, _ in client.calls]
+
+
 # ------------------------------------------------------------- descarga
 async def test_checksum_mismatch_uploads_nothing() -> None:
     client, org = site_client(), FakeWordPressOrg(sha1="0" * 40)

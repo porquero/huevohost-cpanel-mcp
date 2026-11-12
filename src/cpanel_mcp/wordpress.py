@@ -54,8 +54,10 @@ DOWNLOAD_TIMEOUT_SECONDS = 120.0
 TRANSFER_TIMEOUT_SECONDS = 300.0  # subir y extraer ~25 MB; el resto usa 30 s
 
 TOP_LEVEL = "wordpress/"
-# Contenido que puede existir en un docroot recién creado sin ser un sitio.
-HARMLESS_ENTRIES = {"cgi-bin", ".well-known"}
+# Configuración que el hosting deja en un docroot recién creado (p. ej. la
+# versión de PHP). No es contenido de un sitio: se conserva y nunca se pisa.
+PROTECTED_CONFIG = {".htaccess", ".user.ini", "php.ini"}
+HARMLESS_ENTRIES = {"cgi-bin", ".well-known"} | PROTECTED_CONFIG
 REQUIRED_AFTER_INSTALL = {
     "index.php",
     "wp-admin",
@@ -185,6 +187,11 @@ def repack_without_top_level(package: bytes) -> tuple[bytes, str | None, int]:
             relative = name[len(TOP_LEVEL):]
             if not relative:
                 continue
+            if relative in PROTECTED_CONFIG:
+                raise WordPressPackageError(
+                    f"El paquete contiene '{relative}', que podría pisar la "
+                    "configuración del hosting; se descartó."
+                )
             total += info.file_size
             if total > MAX_UNCOMPRESSED_BYTES:
                 raise WordPressPackageError(
@@ -255,7 +262,7 @@ class WordPressInstaller:
                 f"El directorio '{display_path(normalized)}' no existe. Crea "
                 "antes el subdominio (create_subdomain) o el directorio."
             )
-        await self._ensure_empty(normalized)
+        kept = await self._ensure_empty(normalized)
 
         owns_http = self._http is None
         http = self._http or httpx.AsyncClient(
@@ -325,12 +332,19 @@ class WordPressInstaller:
             "zip_removed": zip_removed,
             "verified": verified,
             "site_url": site_url,
+            "kept_existing": kept,
             "next_steps": self._next_steps(site_url),
             "message": (
                 "Archivos de WordPress"
                 + (f" {version}" if version else "")
                 + " subidos y extraídos. WordPress aún NO está instalado: "
                 "el usuario debe completar la instalación en el navegador."
+                + (
+                    " Se conservaron sin cambios los archivos que ya había "
+                    f"({', '.join(kept)})."
+                    if kept
+                    else ""
+                )
             ),
         }
         warnings: list[str] = []
@@ -358,16 +372,30 @@ class WordPressInstaller:
             return None
         return info
 
-    async def _names(self, normalized: str) -> set[str]:
+    async def _entries(self, normalized: str) -> dict[str, str | None]:
         entries = await self.client.list_files(normalized, show_hidden=True)
         return {
-            entry["file"]
+            entry["file"]: entry.get("type")
             for entry in entries
             if isinstance(entry.get("file"), str) and entry["file"]
         }
 
-    async def _ensure_empty(self, normalized: str) -> None:
-        unexpected = sorted(await self._names(normalized) - HARMLESS_ENTRIES)
+    async def _names(self, normalized: str) -> set[str]:
+        return set(await self._entries(normalized))
+
+    async def _ensure_empty(self, normalized: str) -> list[str]:
+        """Exige un directorio vacío salvo la configuración tolerada.
+
+        Devuelve los archivos tolerados que se conservan. Un enlace simbólico
+        nunca se tolera, aunque se llame ``.htaccess``.
+        """
+
+        entries = await self._entries(normalized)
+        unexpected = sorted(
+            name
+            for name, kind in entries.items()
+            if name not in HARMLESS_ENTRIES or kind == "symlink"
+        )
         if unexpected:
             shown = ", ".join(unexpected[:5]) + ("…" if len(unexpected) > 5 else "")
             raise FileAlreadyExistsError(
@@ -375,6 +403,7 @@ class WordPressInstaller:
                 "Para no sobrescribir ni mezclar con un sitio existente, WordPress "
                 "solo se prepara en un directorio vacío. No se modificó nada."
             )
+        return sorted(name for name in entries if name in HARMLESS_ENTRIES)
 
     async def _site_url(self, normalized: str) -> str | None:
         try:
