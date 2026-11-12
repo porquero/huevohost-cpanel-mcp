@@ -56,6 +56,12 @@
       "description": "Cambia la contraseña de un usuario MySQL existente por una aleatoria nueva, por ejemplo cuando el usuario perdió la anterior. Con execute=false solo simula. Con execute=true exige repetir el nombre del usuario en confirm y muestra la nueva contraseña UNA sola vez. La contraseña anterior deja de funcionar: los sitios que la usen (p. ej. DB_PASSWORD en wp-config.php) dejarán de conectar hasta que se actualicen. Solo usuarios MySQL, no cuentas de correo ni de cPanel."
     },
     {
+      "name": "prepare_wordpress",
+      "level": "alto_impacto",
+      "enabled": true,
+      "description": "Prepara WordPress en un directorio vacío de /public_html (normalmente el directorio de un subdominio ya creado): descarga el paquete oficial de wordpress.org en el equipo del usuario, verifica su SHA-1, lo sube a cPanel, lo extrae y elimina el zip. NO instala WordPress ni crea wp-config.php: el usuario debe completar la instalación en el navegador, y la respuesta trae site_url y next_steps para decírselo. Parámetros: directory (relativo a /public_html; debe existir, estar vacío y no ser /public_html) y execute (false por defecto: solo simula, sin contactar cPanel ni wordpress.org). Flujo recomendado: create_subdomain, create_database, create_database_user (privileges=all), prepare_wordpress, y entregar al usuario los datos de la base (servidor localhost, nombre de la base, usuario, contraseña). Es la única herramienta que deja archivos PHP en la cuenta, y solo los del paquete oficial verificado."
+    },
+    {
       "name": "list_files",
       "level": "lectura",
       "enabled": true,

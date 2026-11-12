@@ -20,6 +20,7 @@ from .errors import ConfigError
 from .file_ops import FileOperations
 from .logging_setup import redact_text
 from .operations import Operations
+from .wordpress import WordPressInstaller
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +48,18 @@ INSTRUCTIONS = (
     "datos, DNS ni SSL. create_database, create_database_user y "
     "change_database_user_password son simulaciones salvo execute=true; las dos "
     "últimas generan una contraseña que se muestra una sola vez: entrégasela al "
-    "usuario en ese momento, no la repitas después."
+    "usuario en ese momento, no la repitas después. Para instalar WordPress: (1) create_subdomain si hace falta un subdominio nuevo, (2) create_database, "
+    "(3) create_database_user con privileges=all, (4) prepare_wordpress sobre el "
+    "directorio del subdominio (vacío), y (5) entrega al usuario los datos de la "
+    "base (servidor localhost, base, usuario, contraseña) y los next_steps: él "
+    "completa la instalación en el navegador; tú no puedes terminarla."
 )
 
 
 def _implemented_handlers(
     operations: Operations,
     file_operations: FileOperations,
+    wordpress: WordPressInstaller,
 ) -> dict[str, ToolHandler]:
     return {
         "list_domains": operations.list_domains,
@@ -63,6 +69,7 @@ def _implemented_handlers(
         "list_databases": operations.list_databases,
         "create_database": operations.create_database,
         "list_database_users": operations.list_database_users,
+        "prepare_wordpress": wordpress.prepare_wordpress,
         "create_database_user": operations.create_database_user,
         "change_database_user_password": operations.change_database_user_password,
         "list_files": file_operations.list_files,
@@ -136,7 +143,9 @@ def build_server(
     cpanel_client = client or CPanelClient(settings)
     operations = Operations(cpanel_client)
     file_operations = FileOperations(cpanel_client, settings)
-    handlers = _implemented_handlers(operations, file_operations)
+    handlers = _implemented_handlers(
+        operations, file_operations, WordPressInstaller(cpanel_client)
+    )
 
     mcp = FastMCP(
         name="huevohost-cpanel",

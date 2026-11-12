@@ -111,6 +111,19 @@ Usuarios MySQL (usa la base de prueba anterior y un usuario de prueba, p. ej. `m
 - [ ] Ni `audit.jsonl` ni los logs contienen ninguna de las contraseñas generadas.
 - [ ] Elimina el usuario y la base de prueba desde cPanel al terminar.
 
+## 4c. WordPress (prepare_wordpress)
+
+Usa un subdominio de prueba nuevo (p. ej. `wptk.example.com`) y una base y un usuario nuevos.
+
+- [ ] `prepare_wordpress` con `execute=false` no contacta cPanel ni wordpress.org.
+- [ ] Sobre un directorio **con contenido** se rechaza («no está vacío») sin descargar nada.
+- [ ] Sobre un directorio inexistente se rechaza y sugiere `create_subdomain`.
+- [ ] Con `execute=true` sobre el directorio vacío devuelve `prepared: true`, `verified: true`, la versión y `site_url`.
+- [ ] En cPanel el directorio tiene `wp-admin`, `wp-content`, `wp-includes`, `wp-config-sample.php`, etc., **sin** carpeta `wordpress/` anidada, y no queda ningún `wordpress-install-*.zip`; el zip está en la papelera.
+- [ ] Abrir `site_url` muestra el asistente de instalación de WordPress (puede tardar en haber HTTPS en un subdominio nuevo; AutoSSL).
+- [ ] Completar el asistente con los datos de `create_database_user` termina la instalación y permite entrar a `/wp-admin`.
+- [ ] Repetir `prepare_wordpress` sobre el mismo directorio ahora se rechaza («no está vacío»).
+
 ## 5. Archivos en /public_html
 
 Primero solo lectura:

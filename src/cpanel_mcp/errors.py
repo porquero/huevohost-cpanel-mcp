@@ -83,6 +83,10 @@ class DatabaseExistsError(CpanelMCPError):
     code = "database_exists"
 
 
+class WordPressPackageError(CpanelMCPError):
+    code = "wordpress_package_error"
+
+
 class DatabaseNotFoundError(CpanelMCPError):
     code = "database_not_found"
 

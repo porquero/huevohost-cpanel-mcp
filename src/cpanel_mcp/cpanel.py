@@ -229,42 +229,17 @@ class CPanelClient:
         params: dict[str, Any] | None = None,
         data: dict[str, Any] | None = None,
         files: dict[str, Any] | None = None,
+        timeout: float | None = None,
     ) -> UAPIResult:
         url = f"{self._settings.base_url}/execute/{module}/{function}"
-        headers = {
-            "Authorization": f"cpanel {self._settings.user}:{self._settings.token}"
-        }
-
-        try:
-            response = await self._client.request(
-                method,
-                url,
-                params=params or {},
-                data=data,
-                files=files,
-                headers=headers,
-            )
-        except httpx.TimeoutException as exc:
-            raise CPanelTimeoutError(
-                f"cPanel no respondió en {self._timeout:g} segundos. "
-                "La operación no se completó."
-            ) from exc
-        except httpx.ConnectError as exc:
-            detail = str(exc).upper()
-            if "CERTIFICATE" in detail or "SSL" in detail or "TLS" in detail:
-                raise CPanelConnectionError(
-                    "No se pudo verificar el certificado TLS de cPanel. "
-                    "Si el servidor usa un certificado autofirmado en pruebas, "
-                    "configura CPANEL_VERIFY_SSL=false solo para ese entorno."
-                ) from exc
-            raise CPanelConnectionError(
-                "No se pudo conectar con cPanel. Revisa CPANEL_HOST, CPANEL_PORT "
-                "y la conectividad de red."
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise CPanelConnectionError(
-                "Error de red al comunicarse con cPanel."
-            ) from exc
+        response = await self._send(
+            method,
+            url,
+            params=params,
+            data=data,
+            files=files,
+            timeout=timeout,
+        )
 
         if response.status_code in {401, 403}:
             parsed = self._try_parse(response)
@@ -305,6 +280,58 @@ class CPanelClient:
                 "cPanel devolvió una respuesta que no es JSON válido."
             )
         return self._parse_payload(parsed, module, function)
+
+    async def _send(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
+        files: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> httpx.Response:
+        """Envía la petición con autenticación y mapea los errores de transporte.
+
+        ``timeout`` solo se amplía para transferencias grandes y explícitas
+        (subir o extraer un paquete); el resto usa el valor fijo del cliente.
+        """
+
+        headers = {
+            "Authorization": f"cpanel {self._settings.user}:{self._settings.token}"
+        }
+        effective = self._timeout if timeout is None else timeout
+        try:
+            return await self._client.request(
+                method,
+                url,
+                params=params or {},
+                data=data,
+                files=files,
+                headers=headers,
+                timeout=effective,
+            )
+        except httpx.TimeoutException as exc:
+            raise CPanelTimeoutError(
+                f"cPanel no respondió en {effective:g} segundos. "
+                "La operación no se completó."
+            ) from exc
+        except httpx.ConnectError as exc:
+            detail = str(exc).upper()
+            if "CERTIFICATE" in detail or "SSL" in detail or "TLS" in detail:
+                raise CPanelConnectionError(
+                    "No se pudo verificar el certificado TLS de cPanel. "
+                    "Si el servidor usa un certificado autofirmado en pruebas, "
+                    "configura CPANEL_VERIFY_SSL=false solo para ese entorno."
+                ) from exc
+            raise CPanelConnectionError(
+                "No se pudo conectar con cPanel. Revisa CPANEL_HOST, CPANEL_PORT "
+                "y la conectividad de red."
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise CPanelConnectionError(
+                "Error de red al comunicarse con cPanel."
+            ) from exc
 
     @staticmethod
     def _try_parse(response: httpx.Response) -> dict[str, Any] | None:
@@ -574,11 +601,13 @@ class CPanelClient:
         content: bytes,
         *,
         overwrite: bool,
+        timeout: float | None = None,
     ) -> UAPIResult:
         result = await self._request(
             "POST",
             "Fileman",
             "upload_files",
+            timeout=timeout,
             params={
                 "dir": directory,
                 "overwrite": 1 if overwrite else 0,
@@ -612,6 +641,80 @@ class CPanelClient:
                     f"cPanel no guardó el archivo '{filename}': {detail}"
                 )
         return result
+
+    async def get_home_directory(self) -> str:
+        result = await self.call("Variables", "get_user_information", {"name": "home"})
+        data = result.data
+        home = data.get("home") if isinstance(data, dict) else None
+        if not isinstance(home, str) or not home.startswith("/"):
+            raise CPanelProtocolError(
+                "Variables::get_user_information devolvió un formato inesperado."
+            )
+        return home.rstrip("/")
+
+    async def extract_archive(
+        self,
+        source: str,
+        destination: str,
+        *,
+        timeout: float | None = None,
+    ) -> None:
+        """Extrae un zip en el servidor (API 2 ``Fileman::fileop`` op=extract).
+
+        ``source`` va relativo al directorio personal; ``destination`` debe ser
+        una ruta **absoluta** dentro de él (cPanel rechaza las relativas).
+        """
+
+        response = await self._send(
+            "POST",
+            f"{self._settings.base_url}/json-api/cpanel",
+            data={
+                "cpanel_jsonapi_user": self._settings.user,
+                "cpanel_jsonapi_apiversion": 2,
+                "cpanel_jsonapi_module": "Fileman",
+                "cpanel_jsonapi_func": "fileop",
+                "op": "extract",
+                "sourcefiles": source,
+                "destfiles": destination,
+                "doubledecode": 0,
+            },
+            timeout=timeout,
+        )
+        if response.status_code == 401:
+            raise CPanelAuthError(
+                "Token inválido o no aceptado por cPanel (HTTP 401). "
+                "Revisa CPANEL_USER y CPANEL_TOKEN."
+            )
+        if response.status_code == 403:
+            raise CPanelPermissionError(
+                "cPanel rechazó la extracción (HTTP 403). El token puede no "
+                "tener permiso sobre Fileman (API 2)."
+            )
+        if not 200 <= response.status_code < 300:
+            raise CPanelProtocolError(
+                f"cPanel respondió HTTP {response.status_code} al extraer."
+            )
+        parsed = self._try_parse(response)
+        result = parsed.get("cpanelresult") if parsed else None
+        if not isinstance(result, dict):
+            raise CPanelProtocolError(
+                "cPanel devolvió una respuesta inesperada al extraer el archivo."
+            )
+        entries = result.get("data")
+        first = entries[0] if isinstance(entries, list) and entries else None
+        failed = (
+            result.get("error")
+            or not isinstance(first, dict)
+            or first.get("result") not in {1, "1", True}
+        )
+        if failed:
+            detail = result.get("error") or (
+                first.get("err") if isinstance(first, dict) else None
+            )
+            raise FileOperationError(
+                "cPanel no pudo extraer el archivo: "
+                f"{detail or 'sin detalle del servidor'}"
+            )
 
     async def trash_file(self, path: str) -> dict[str, Any]:
         result = await self.call(

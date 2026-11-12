@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPanel de Huevohost: listar dominios, listar y crear cuentas de correo, crear subdominios sobre dominios existentes, listar y crear bases de datos MySQL, crear usuarios MySQL con permisos sobre una base y cambiar su contraseña, y listar, descargar, crear, subir (texto, base64 pequeño o binarios desde el disco local) y mover a la papelera archivos dentro de `/public_html`. Fase 2 está solo diseñada: publicar landings en subdominios.
+Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPanel de Huevohost: listar dominios, listar y crear cuentas de correo, crear subdominios sobre dominios existentes, listar y crear bases de datos MySQL, crear usuarios MySQL con permisos sobre una base y cambiar su contraseña, preparar los archivos de WordPress en un directorio vacío, y listar, descargar, crear, subir (texto, base64 pequeño o binarios desde el disco local) y mover a la papelera archivos dentro de `/public_html`. Fase 2 está solo diseñada: publicar landings en subdominios.
 
 ## Seguridad obligatoria
 
@@ -12,7 +12,7 @@ Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPane
 - `audit.jsonl` registra fecha, acción, argumentos saneados y resultado. Nunca incluye contraseñas, tokens ni el contenido de los archivos (`content`, `content_base64`, etc. se redactan).
 - No expongas herramientas de cambio de contraseñas de correo o de cPanel, borrado de bases de datos o usuarios, DNS ni SSL. Las herramientas de bases de datos y usuarios MySQL existen por petición explícita del usuario. `delete_file` existe por petición explícita y solo mueve a la papelera de cPanel.
 - `allowed_actions.json` es la fuente de verdad. Solo se registran las acciones con `enabled=true`. Si se habilita una acción no implementada, el servidor debe fallar cerrado.
-- Las acciones de nivel `alto_impacto` se entregan desactivadas por defecto, salvo `delete_file` (limitada a la papelera) y `change_database_user_password`, habilitadas explícitamente por el usuario.
+- Las acciones de nivel `alto_impacto` se entregan desactivadas por defecto, salvo `delete_file` (limitada a la papelera) y `change_database_user_password` y `prepare_wordpress`, habilitadas explícitamente por el usuario.
 - La creación real de correo exige `execute=true`. El dry-run no debe hacer peticiones HTTP ni generar contraseña.
 - La contraseña generada se muestra una sola vez en la respuesta de creación y no se vuelve a registrar.
 
@@ -37,6 +37,17 @@ Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPane
 - `change_database_user_password` es de nivel `alto_impacto`: exige `execute=true` y `confirm` igual al usuario indicado, solo actúa sobre usuarios MySQL existentes y avisa de que los sitios que usen la contraseña anterior dejarán de conectar.
 - Los nombres de campo de la UAPI de MySQL se verificaron con `scripts/verify_mysql_api.py` (solo lectura). El formato de `privileges` de `set_privileges_on_database` solo se comprueba creando un usuario de prueba real (ver la checklist).
 
+## Reglas de WordPress
+
+- `prepare_wordpress` es la **única** herramienta que deja archivos PHP en la cuenta, y solo los del paquete oficial de wordpress.org. Nunca escribas PHP con contenido del modelo; las demás herramientas siguen bloqueando `.php`.
+- La URL de descarga es fija (`https://wordpress.org/latest.zip`); el modelo no puede indicar otra. Se verifica el SHA-1 publicado por wordpress.org, solo se siguen redirecciones HTTPS dentro de `wordpress.org` y se descarta el paquete si algo no coincide.
+- El zip se valida antes de subirlo (rutas fuera de `wordpress/`, `..`, rutas absolutas, enlaces simbólicos, entradas cifradas, límites de archivos y de tamaño expandido) y se reempaqueta en memoria sin la carpeta `wordpress/`.
+- El directorio debe existir, no ser `public_html`, no ser un enlace simbólico y estar **vacío** (solo se toleran `cgi-bin` y `.well-known`): nunca se mezcla ni se sobrescribe un sitio existente. Esa comprobación ocurre antes de descargar nada.
+- No se crea `wp-config.php` ni se ejecuta el instalador: el usuario completa la instalación en el navegador con los datos de la base que entrega `create_database_user`.
+- El zip temporal siempre se envía a la papelera de cPanel, también si la extracción falla.
+- `destfiles` de `Fileman::fileop` (API 2, `op=extract`) exige una ruta **absoluta** dentro del directorio personal, que se obtiene con `Variables::get_user_information` (`name=home`).
+- **No uses `WordPressSite::create` ni WP Toolkit por API**: no admite elegir el dominio y, sin parámetros, instala WordPress en el dominio principal de la cuenta (ya ocurrió una vez). Detalles en la regla de pruebas sobre sondeos.
+
 ## Reglas de archivos
 
 - Toda ruta se normaliza y se confina a `public_html`. Se aceptan `public_html/x`, `/public_html/x` y rutas relativas como `sitio/x.html`.
@@ -54,11 +65,12 @@ Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPane
 ## Arquitectura
 
 - `src/cpanel_mcp/config.py`: validación de entorno y rutas.
-- `src/cpanel_mcp/cpanel.py`: cliente UAPI sobre `httpx`, timeout de 30 s y mapeo de errores.
+- `src/cpanel_mcp/cpanel.py`: cliente UAPI sobre `httpx`, timeout de 30 s y mapeo de errores. Única excepción al timeout: subir y extraer el paquete de WordPress (300 s, solo esas dos llamadas de `prepare_wordpress`).
 - `src/cpanel_mcp/operations.py`: lógica de dominios, correo y subdominios.
 - `src/cpanel_mcp/file_ops.py`: normalización de rutas, comprobación de symlinks y operaciones de archivos.
 - `src/cpanel_mcp/binary_types.py`: allowlist de binarios y verificación por magic bytes.
 - `src/cpanel_mcp/local_files.py`: resolución y lectura segura de archivos locales.
+- `src/cpanel_mcp/wordpress.py`: descarga verificada, validación y reempaquetado del zip de WordPress y su extracción en el servidor.
 - `src/cpanel_mcp/server.py`: FastMCP y registro filtrado de herramientas.
 - `src/cpanel_mcp/audit.py`: auditoría JSONL.
 - `src/cpanel_mcp/validators.py`: validaciones estrictas.

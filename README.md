@@ -9,6 +9,7 @@ Incluye:
 - Creación de cuentas de correo con dry-run por defecto, contraseña aleatoria de 20 caracteres y verificación posterior.
 - Creación de **subdominios** sobre dominios existentes de la cuenta (nunca addon domains ni parked domains), con dry-run por defecto y document root confinado a `/public_html`.
 - **Bases de datos MySQL**: listar y crear bases, crear usuarios con permisos sobre una base y cambiar la contraseña de un usuario (por si se pierde). Dry-run por defecto; las contraseñas las genera el servidor y se muestran una sola vez.
+- **WordPress sin WP Toolkit**: `prepare_wordpress` descarga el paquete oficial, lo sube y lo extrae en un directorio vacío; el usuario completa la instalación en el navegador. Ver [docs/INSTALAR_WORDPRESS.md](docs/INSTALAR_WORDPRESS.md).
 - Operaciones de archivos confinadas a `/public_html`: listar, descargar texto, crear, subir y mover a la papelera.
 - Subida de **binarios** (fotos, logos, PDFs, fuentes) desde el disco del usuario con `upload_local_file`: los bytes no pasan por el modelo y no se instala nada en la cuenta cPanel.
 
@@ -66,6 +67,7 @@ Configura las credenciales en las variables de usuario del sistema, no en el rep
     { "name": "list_database_users", "level": "lectura", "enabled": true },
     { "name": "create_database_user", "level": "escritura_reversible", "enabled": true },
     { "name": "change_database_user_password", "level": "alto_impacto", "enabled": true },
+    { "name": "prepare_wordpress", "level": "alto_impacto", "enabled": true },
     { "name": "list_files", "level": "lectura", "enabled": true },
     { "name": "download_file", "level": "lectura", "enabled": true },
     { "name": "create_file", "level": "escritura_reversible", "enabled": true },
@@ -159,6 +161,15 @@ Para cuando el usuario **perdió la contraseña**: genera una nueva y reemplaza 
 - La nueva contraseña se muestra **una sola vez**. **La anterior deja de funcionar**: un sitio que la use (por ejemplo `DB_PASSWORD` en `wp-config.php`) dejará de conectar hasta que se actualice. El servidor no edita `wp-config.php` (no escribe archivos `.php`).
 
 Las contraseñas se envían a cPanel por POST en el cuerpo de la petición (no en la URL, para que no queden en los registros de acceso) y no se escriben en logs ni auditoría. Quedan, como la de las cuentas de correo, en el historial de la conversación del cliente MCP.
+
+### `prepare_wordpress(directory, execute=false)`
+
+Deja los archivos de WordPress listos en un directorio vacío de `/public_html` (normalmente el de un subdominio recién creado). **No instala WordPress**: el usuario completa la instalación en el navegador. Guía completa en [docs/INSTALAR_WORDPRESS.md](docs/INSTALAR_WORDPRESS.md).
+
+- `directory`: relativo a `/public_html`; debe existir, estar vacío (se toleran `cgi-bin` y `.well-known`) y no ser `/public_html`.
+- `execute=false`: no contacta cPanel ni wordpress.org. `execute=true`: descarga `latest.zip` de wordpress.org en este equipo y verifica su SHA-1 oficial, lo valida, lo sube como un solo archivo, lo extrae en el servidor y envía el zip a la papelera.
+- Devuelve `version`, `site_url` (si el directorio es el de un subdominio), `verified` y `next_steps`.
+- Es la única herramienta que deja archivos PHP en la cuenta, y solo los del paquete oficial verificado. La subida y la extracción usan un timeout de 300 s en lugar de 30 s.
 
 ### Operaciones de archivos
 
