@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPanel de Huevohost: listar dominios, listar y crear cuentas de correo, crear subdominios sobre dominios existentes, y listar, descargar, crear, subir (texto, base64 pequeño o binarios desde el disco local) y mover a la papelera archivos dentro de `/public_html`. Fase 2 está solo diseñada: publicar landings en subdominios.
+Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPanel de Huevohost: listar dominios, listar y crear cuentas de correo, crear subdominios sobre dominios existentes, listar y crear bases de datos MySQL vacías, y listar, descargar, crear, subir (texto, base64 pequeño o binarios desde el disco local) y mover a la papelera archivos dentro de `/public_html`. Fase 2 está solo diseñada: publicar landings en subdominios.
 
 ## Seguridad obligatoria
 
@@ -10,7 +10,7 @@ Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPane
 - Nunca escribas tokens, contraseñas ni cabeceras `Authorization` en el repositorio, logs, auditoría, mensajes de error, tests o respuestas.
 - Los logs de depuración van **solo a stderr**. `stdout` está reservado para el protocolo JSON-RPC de MCP. No uses `print()` hacia stdout en el servidor; los errores de arranque se escriben directamente en `sys.stderr`.
 - `audit.jsonl` registra fecha, acción, argumentos saneados y resultado. Nunca incluye contraseñas, tokens ni el contenido de los archivos (`content`, `content_base64`, etc. se redactan).
-- No expongas herramientas de cambio de contraseñas, bases de datos, DNS ni SSL. `delete_file` existe por petición explícita y solo mueve a la papelera de cPanel.
+- No expongas herramientas de cambio de contraseñas, usuarios o permisos de bases de datos, borrado de bases de datos, DNS ni SSL. `list_databases` y `create_database` existen por petición explícita del usuario (solo listar y crear bases vacías). `delete_file` existe por petición explícita y solo mueve a la papelera de cPanel.
 - `allowed_actions.json` es la fuente de verdad. Solo se registran las acciones con `enabled=true`. Si se habilita una acción no implementada, el servidor debe fallar cerrado.
 - Las acciones de nivel `alto_impacto` se entregan desactivadas por defecto, salvo `delete_file`, habilitada explícitamente por el usuario y limitada a la papelera.
 - La creación real de correo exige `execute=true`. El dry-run no debe hacer peticiones HTTP ni generar contraseña.
@@ -25,6 +25,13 @@ Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPane
 - El document root no puede existir antes de crear el subdominio: evita adoptar o sobrescribir el contenido de un sitio existente.
 - Comprueba cada componente con `Fileman::get_file_information` y rechaza enlaces simbólicos antes de llamar a `SubDomain::addsubdomain`.
 - La creación real exige `execute=true` y se verifica con `SubDomain::listsubdomains`. No expongas borrado de subdominios: se elimina manualmente desde cPanel.
+
+## Reglas de bases de datos
+
+- Solo existen `list_databases` (lectura) y `create_database`. No añadas creación de usuarios MySQL, contraseñas, `GRANT`/permisos, borrado, importación ni acceso a datos: esos pasos se hacen desde cPanel.
+- `create_database` exige `execute=true` para actuar. El dry-run no hace peticiones HTTP.
+- `name` va sin prefijo: solo `[a-z][a-z0-9_]*` (máx. 63). El prefijo de la cuenta se obtiene de `Mysql::get_restrictions` (nunca se asume ni se acepta del modelo), se valida y se respeta el largo máximo que informe cPanel.
+- Antes de crear se comprueba con `Mysql::list_databases` que no exista; tras crear se verifica con el mismo listado. Una base existente nunca se modifica.
 
 ## Reglas de archivos
 

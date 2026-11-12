@@ -16,11 +16,13 @@ from .errors import (
     CPanelPermissionError,
     CPanelProtocolError,
     CPanelTimeoutError,
+    DatabaseExistsError,
     DomainNotHostedError,
     FileAlreadyExistsError,
     FileOperationError,
     FileStorageRoleDisabledError,
     MailRoleDisabledError,
+    MysqlRoleDisabledError,
     RemoteFileNotFoundError,
     SubdomainExistsError,
 )
@@ -62,6 +64,21 @@ def _classify_api_error(
     ):
         return SubdomainExistsError(
             "El subdominio ya existe en cPanel. No se modificó nada."
+        )
+
+    if module == "Mysql" and (
+        "already exists" in lower or "already in use" in lower
+    ):
+        return DatabaseExistsError(
+            "La base de datos ya existe en cPanel. No se modificó nada."
+        )
+
+    if module == "Mysql" and (
+        "mysql" in lower or "database" in lower or "role" in lower
+    ) and ("disabled" in lower or "not enabled" in lower):
+        return MysqlRoleDisabledError(
+            "El rol de bases de datos (MySQL / Database Server) está "
+            "desactivado en esta cuenta cPanel."
         )
 
     if "already exists" in lower or "already in use" in lower:
@@ -402,6 +419,27 @@ class CPanelClient:
                 "disallowdot": 1,
             },
         )
+
+    async def list_databases(self) -> list[dict[str, Any]]:
+        result = await self.call("Mysql", "list_databases", {})
+        data = result.data or []
+        if not isinstance(data, list):
+            raise CPanelProtocolError(
+                "Mysql::list_databases devolvió un formato inesperado."
+            )
+        return [item for item in data if isinstance(item, dict)]
+
+    async def get_mysql_restrictions(self) -> dict[str, Any]:
+        result = await self.call("Mysql", "get_restrictions", {})
+        data = result.data or {}
+        if not isinstance(data, dict):
+            raise CPanelProtocolError(
+                "Mysql::get_restrictions devolvió un formato inesperado."
+            )
+        return data
+
+    async def create_database(self, name: str) -> UAPIResult:
+        return await self.call("Mysql", "create_database", {"name": name})
 
     async def list_files(
         self,

@@ -79,6 +79,14 @@ class SubdomainExistsError(CpanelMCPError):
     code = "subdomain_exists"
 
 
+class DatabaseExistsError(CpanelMCPError):
+    code = "database_exists"
+
+
+class MysqlRoleDisabledError(CPanelError):
+    code = "mysql_role_disabled"
+
+
 class MailRoleDisabledError(CPanelError):
     code = "mail_role_disabled"
 

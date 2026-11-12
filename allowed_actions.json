@@ -26,6 +26,18 @@
       "description": "Crea un subdominio (por ejemplo blog.example.com) sobre el dominio principal, un addon domain o un parked domain de la cuenta. No crea addon domains ni parked domains. Con execute=false solo simula y no contacta cPanel. El document root debe estar dentro de /public_html, debe estar libre y el subdominio no puede existir. Al terminar verifica el subdominio en cPanel."
     },
     {
+      "name": "list_databases",
+      "level": "lectura",
+      "enabled": true,
+      "description": "Lista las bases de datos MySQL de la cuenta cPanel con su uso de disco y los usuarios asociados. Solo lectura."
+    },
+    {
+      "name": "create_database",
+      "level": "escritura_reversible",
+      "enabled": true,
+      "description": "Crea una base de datos MySQL vacía. Recibe name sin prefijo (minúsculas, números y guion bajo; cPanel antepone el prefijo de la cuenta). Con execute=false solo simula y no contacta cPanel. Con execute=true comprueba que no exista, la crea y la verifica. No crea usuarios, contraseñas ni permisos, y no existe borrado: se gestiona desde cPanel."
+    },
+    {
       "name": "list_files",
       "level": "lectura",
       "enabled": true,

@@ -11,6 +11,7 @@ from .cpanel import CPanelClient
 from .errors import (
     AccountExistsError,
     CPanelError,
+    DatabaseExistsError,
     DomainNotHostedError,
     FileAlreadyExistsError,
     SubdomainExistsError,
@@ -24,6 +25,7 @@ from .file_ops import (
     normalize_public_path,
 )
 from .validators import (
+    validate_database_name,
     validate_domain,
     validate_execute,
     validate_quota_mb,
@@ -155,6 +157,133 @@ class Operations:
             "domains": domains,
             "count": len(domains),
         }
+
+    async def list_databases(self) -> dict[str, Any]:
+        """Lista las bases de datos MySQL de la cuenta (solo lectura)."""
+
+        items = await self.client.list_databases()
+        databases: list[dict[str, Any]] = []
+        for item in items:
+            name = item.get("database")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            users: list[str] = []
+            raw_users = item.get("users")
+            if isinstance(raw_users, list):
+                for user in raw_users:
+                    if isinstance(user, dict):
+                        user = user.get("user")
+                    if isinstance(user, str) and user.strip():
+                        users.append(user.strip())
+            usage = item.get("disk_usage")
+            databases.append(
+                {
+                    "name": name.strip(),
+                    "disk_usage_bytes": (
+                        usage
+                        if isinstance(usage, int) and not isinstance(usage, bool)
+                        else None
+                    ),
+                    "users": users,
+                }
+            )
+        databases.sort(key=lambda database: database["name"])
+        return {"count": len(databases), "databases": databases}
+
+    async def create_database(
+        self,
+        name: str,
+        execute: bool = False,
+    ) -> dict[str, Any]:
+        """Crea una base de datos MySQL vacía (sin usuarios ni permisos)."""
+
+        name = validate_database_name(name)
+        execute = validate_execute(execute)
+
+        if not execute:
+            return {
+                "dry_run": True,
+                "name": name,
+                "created": False,
+                "verified": False,
+                "message": (
+                    "Simulación: no se contactó cPanel. Al ejecutar, cPanel "
+                    "antepone el prefijo de la cuenta (por ejemplo "
+                    "usuario_" + name + "), se comprueba que no exista y se "
+                    "crea una base de datos vacía, sin usuarios ni permisos."
+                ),
+            }
+
+        restrictions = await self.client.get_mysql_restrictions()
+        prefix = restrictions.get("prefix")
+        prefix = prefix.strip() if isinstance(prefix, str) else ""
+        if prefix and not all(char.isalnum() or char == "_" for char in prefix):
+            raise CPanelError(
+                "cPanel devolvió un prefijo de base de datos con caracteres "
+                "inesperados. No se creó nada."
+            )
+        full_name = name if prefix and name.startswith(prefix) else prefix + name
+
+        max_length = restrictions.get("max_database_name_length")
+        if isinstance(max_length, int) and not isinstance(max_length, bool):
+            if len(full_name) > max_length:
+                raise ValidationError(
+                    f"'{full_name}' tiene {len(full_name)} caracteres y cPanel "
+                    f"permite como máximo {max_length} (incluido el prefijo "
+                    f"'{prefix}'). Usa un nombre más corto."
+                )
+
+        existing = await self.client.list_databases()
+        if self._database_exists(existing, full_name):
+            raise DatabaseExistsError(
+                f"La base de datos '{full_name}' ya existe. No se modificó nada."
+            )
+
+        try:
+            await self.client.create_database(full_name)
+        except DatabaseExistsError:
+            raise DatabaseExistsError(
+                f"La base de datos '{full_name}' ya existe. No se modificó nada."
+            ) from None
+
+        verified = False
+        verification_error: str | None = None
+        try:
+            verified = self._database_exists(
+                await self.client.list_databases(), full_name
+            )
+        except CPanelError as exc:
+            verification_error = str(exc)
+
+        result: dict[str, Any] = {
+            "dry_run": False,
+            "name": full_name,
+            "created": True,
+            "verified": verified,
+            "message": (
+                "Base de datos creada y verificada en cPanel. Está vacía y "
+                "sin usuarios: este servidor no crea usuarios MySQL ni "
+                "contraseñas; asígnalos desde cPanel → Bases de datos MySQL."
+            ),
+        }
+        if not verified:
+            warning = (
+                "cPanel aceptó la creación, pero la base de datos aún no "
+                "aparece en el listado de verificación. Revisa cPanel antes de "
+                "reutilizar el nombre."
+            )
+            if verification_error:
+                warning += f" Detalle: {verification_error}"
+            result["warning"] = warning
+        return result
+
+    @staticmethod
+    def _database_exists(items: list[dict[str, Any]], name: str) -> bool:
+        return any(
+            isinstance(item.get("database"), str)
+            and item["database"].strip() == name
+            for item in items
+        )
 
     async def list_email_accounts(self, domain: str) -> dict[str, Any]:
         domain = validate_domain(domain)

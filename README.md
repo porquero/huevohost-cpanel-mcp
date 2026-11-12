@@ -8,18 +8,20 @@ Incluye:
 - Lectura de cuentas de correo por dominio.
 - Creación de cuentas de correo con dry-run por defecto, contraseña aleatoria de 20 caracteres y verificación posterior.
 - Creación de **subdominios** sobre dominios existentes de la cuenta (nunca addon domains ni parked domains), con dry-run por defecto y document root confinado a `/public_html`.
+- Listado y creación de **bases de datos MySQL** vacías, con dry-run por defecto y verificación posterior.
 - Operaciones de archivos confinadas a `/public_html`: listar, descargar texto, crear, subir y mover a la papelera.
 - Subida de **binarios** (fotos, logos, PDFs, fuentes) desde el disco del usuario con `upload_local_file`: los bytes no pasan por el modelo y no se instala nada en la cuenta cPanel.
 
-No incluye cambio de contraseñas, bases de datos, DNS ni SSL. La publicación de landings (Fase 2) está solo diseñada. `delete_file` mueve a la papelera de cPanel, no borra de forma permanente.
+No incluye cambio de contraseñas, usuarios ni permisos de bases de datos, borrado de bases de datos, DNS ni SSL. La publicación de landings (Fase 2) está solo diseñada. `delete_file` mueve a la papelera de cPanel, no borra de forma permanente.
 
 ## Requisitos
 
 - Python 3.11 o superior.
-- Token de API de cPanel con permisos sobre `Email`, `DomainInfo`, `SubDomain` y `Fileman`.
+- Token de API de cPanel con permisos sobre `Email`, `DomainInfo`, `SubDomain`, `Mysql` y `Fileman`.
 - Rol **Receive Mail** activo en la cuenta si se van a usar las herramientas de correo.
 - Rol **File Storage** activo si se van a usar las herramientas de archivos.
 - Rol **Web Server** activo si se van a crear subdominios.
+- Rol **Database Server** (MySQL) activo si se van a usar las herramientas de bases de datos.
 
 ## Instalación
 
@@ -59,6 +61,8 @@ Configura las credenciales en las variables de usuario del sistema, no en el rep
     { "name": "list_email_accounts", "level": "lectura", "enabled": true },
     { "name": "create_email_account", "level": "escritura_reversible", "enabled": true },
     { "name": "create_subdomain", "level": "escritura_reversible", "enabled": true },
+    { "name": "list_databases", "level": "lectura", "enabled": true },
+    { "name": "create_database", "level": "escritura_reversible", "enabled": true },
     { "name": "list_files", "level": "lectura", "enabled": true },
     { "name": "download_file", "level": "lectura", "enabled": true },
     { "name": "create_file", "level": "escritura_reversible", "enabled": true },
@@ -107,6 +111,26 @@ Ejemplo:
 ```
 
 Al terminar, sube el contenido con `upload_file` o `create_file` dentro de `public_html/blog`. El servidor no expone el borrado de subdominios: si te equivocas, elimínalo manualmente desde cPanel.
+
+### `list_databases()`
+
+Solo lectura. Devuelve las bases de datos MySQL de la cuenta con su nombre completo (con prefijo), el uso de disco en bytes y los usuarios asociados.
+
+### `create_database(name, execute=false)`
+
+Crea una base de datos MySQL **vacía**.
+
+- `name`: solo el nombre, sin prefijo. Minúsculas, números y guion bajo, empezando por letra (máx. 63 caracteres). cPanel antepone el prefijo de la cuenta: `blog` pasa a ser `usuario_blog`.
+- `execute=false`: no contacta cPanel y devuelve el nombre propuesto.
+- `execute=true`: lee el prefijo y el largo máximo con `Mysql::get_restrictions`, comprueba que la base no exista, la crea y la verifica en `Mysql::list_databases`. Devuelve `created`/`verified` y el nombre completo.
+
+No crea usuarios MySQL, contraseñas ni permisos, y no hay borrado: la base queda sin usuarios. Asígnalos o elimínala desde cPanel → Bases de datos MySQL.
+
+Ejemplo:
+
+```json
+{ "name": "blog", "execute": true }
+```
 
 ### Operaciones de archivos
 

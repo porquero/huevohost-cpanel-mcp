@@ -88,6 +88,16 @@ Comprobaciones adicionales:
 - [ ] Un `directory` que ya existe se rechaza sin tocar el contenido existente.
 - [ ] La herramienta no permite crear addon domains ni parked domains.
 
+## 4b. Bases de datos MySQL
+
+- [ ] `list_databases` devuelve las bases existentes con prefijo, uso de disco y usuarios.
+- [ ] `create_database` con `execute=false` devuelve el plan y no crea nada (comprueba en cPanel).
+- [ ] `create_database` con `execute=true` y un nombre de prueba (p. ej. `mcp_prueba`) devuelve `created: true`, `verified: true` y el nombre con el prefijo de la cuenta; aparece en cPanel → Bases de datos MySQL.
+- [ ] Repetir la creación devuelve «ya existe» y no modifica nada.
+- [ ] Un nombre con mayúsculas, guiones, puntos o comillas se rechaza antes de contactar cPanel.
+- [ ] Un nombre que supere el largo máximo (con prefijo) se rechaza con un mensaje claro.
+- [ ] La base creada no tiene usuarios; elimínala manualmente desde cPanel al terminar la prueba.
+
 ## 5. Archivos en /public_html
 
 Primero solo lectura:

@@ -99,6 +99,26 @@ def validate_subdomain(value: object) -> str:
     return label
 
 
+_DATABASE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
+
+
+def validate_database_name(value: object) -> str:
+    """Valida el nombre de la base de datos sin el prefijo de la cuenta."""
+
+    if not isinstance(value, str):
+        raise ValidationError("El nombre de la base de datos debe ser texto.")
+    name = value.strip()
+    if not name:
+        raise ValidationError("El nombre de la base de datos no puede estar vacío.")
+    if not _DATABASE_NAME_RE.fullmatch(name):
+        raise ValidationError(
+            "El nombre de la base de datos solo puede contener minúsculas, "
+            "números y guion bajo, y debe empezar con una letra (máximo 63 "
+            "caracteres). No incluyas espacios, guiones, puntos ni comillas."
+        )
+    return name
+
+
 def validate_quota_mb(value: object) -> int:
     if type(value) is not int:
         raise ValidationError("La cuota debe ser un número entero de MB.")
