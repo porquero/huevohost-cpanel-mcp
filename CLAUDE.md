@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPanel de Huevohost: listar dominios, listar y crear cuentas de correo, crear subdominios sobre dominios existentes, listar y crear bases de datos MySQL, crear usuarios MySQL con permisos sobre una base y cambiar su contraseña, preparar los archivos de WordPress en un directorio vacío, y listar, descargar, crear, subir (texto, base64 pequeño o binarios desde el disco local) y mover a la papelera archivos dentro de `/public_html`. Fase 2 está solo diseñada: publicar landings en subdominios.
+Servidor MCP local (stdio) que expone acciones permitidas sobre una cuenta cPanel de Huevohost: listar dominios, listar y crear cuentas de correo, crear subdominios sobre dominios existentes, listar y crear bases de datos MySQL, crear usuarios MySQL con permisos sobre una base y cambiar su contraseña, preparar los archivos de WordPress en un directorio vacío, y listar, descargar, crear, subir (texto, base64 pequeño o binarios desde el disco local) y mover a la papelera archivos dentro de `/public_html`. Publicar landings estáticas ya es posible combinando las herramientas de subdominios y archivos; la Fase 2 (herramienta dedicada `publish_landing_page` con vista previa, respaldo y reversión) está solo diseñada.
 
 ## Seguridad obligatoria
 
@@ -98,4 +98,4 @@ py -3.11 -m venv .venv
 
 ## Fase 2
 
-No implementar `publish_landing_page` sin aprobación explícita. El diseño exige respaldo previo, vista previa, confirmación por hash, allowlist de origen estático, bloqueo de PHP/CGI/symlinks y auditoría de cada paso.
+No implementar la herramienta dedicada `publish_landing_page` sin aprobación explícita (publicar una landing con `create_subdomain`, `create_file`, `upload_file` y `upload_local_file` ya funciona y no depende de ella). El diseño exige respaldo previo, vista previa, confirmación por hash, allowlist de origen estático, bloqueo de PHP/CGI/symlinks y auditoría de cada paso.

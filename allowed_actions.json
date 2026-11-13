@@ -107,7 +107,7 @@
       "name": "publish_landing_page",
       "level": "alto_impacto",
       "enabled": false,
-      "description": "Fase 2, no implementada. Si se habilita, el servidor falla al arrancar para evitar una acción sin respaldo."
+      "description": "Fase 2, no implementada: herramienta dedicada con vista previa, respaldo y reversión. Si se habilita, el servidor falla al arrancar para evitar una acción sin respaldo. Publicar una landing ya es posible con create_subdomain, create_file, upload_file y upload_local_file."
     }
   ]
 }

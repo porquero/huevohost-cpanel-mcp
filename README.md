@@ -13,7 +13,7 @@ Incluye:
 - Operaciones de archivos confinadas a `/public_html`: listar, descargar texto, crear, subir y mover a la papelera.
 - Subida de **binarios** (fotos, logos, PDFs, fuentes) desde el disco del usuario con `upload_local_file`: los bytes no pasan por el modelo y no se instala nada en la cuenta cPanel.
 
-No incluye cambio de contraseñas de correo o de cPanel, borrado de bases de datos o usuarios, acceso remoto a MySQL, DNS ni SSL. La publicación de landings (Fase 2) está solo diseñada. `delete_file` mueve a la papelera de cPanel, no borra de forma permanente.
+No incluye cambio de contraseñas de correo o de cPanel, borrado de bases de datos o usuarios, acceso remoto a MySQL, DNS ni SSL. Publicar una landing estática **ya es posible** con las herramientas de subdominios y archivos (ver «Publicar una landing con las herramientas actuales»); lo que está solo diseñado (Fase 2) es una herramienta dedicada con vista previa, respaldo y reversión. `delete_file` mueve a la papelera de cPanel, no borra de forma permanente.
 
 ## Requisitos
 
@@ -321,12 +321,30 @@ La contraseña se muestra una vez en la respuesta de la herramienta y queda en e
 
 Si `add_pop` agota los 30 segundos después de enviar la petición, cPanel podría haber creado la cuenta aunque el servidor no reciba la confirmación. En ese caso la contraseña generada se pierde. Revisa el listado en cPanel y restablece la contraseña manualmente si la cuenta existe.
 
-## Fase 2 (diseño, no implementado)
+## Publicar una landing con las herramientas actuales
 
-Publicar una landing estática en un subdominio existente:
+No hace falta la Fase 2 para publicar una landing estática. Se hace combinando herramientas que ya existen:
+
+1. **Subdominio:** `create_subdomain` (el directorio por defecto es `public_html/<subdominio>`).
+2. **Contenido de texto** (HTML, CSS, JS, JSON): `create_file` o `upload_file` con `content`.
+3. **Imágenes, fuentes y PDF:** el usuario copia los archivos a la carpeta `archivos/` y Claude los sube con `upload_local_file` (jpg, png, webp, gif, ico, pdf, woff, woff2, ttf, otf).
+4. **Comprobar:** `list_files` y abrir la URL del subdominio (en un subdominio nuevo el HTTPS puede tardar unos minutos por AutoSSL).
+5. **Actualizar:** volver a subir con `overwrite=true`; cada archivo anterior se mueve antes a la papelera de cPanel.
+
+Límites de este camino:
+
+- **Sin PHP ni CGI.** Las herramientas bloquean `.php`, `.cgi`, `.htaccess`, etc., así que un formulario de contacto que dependa de PHP no se puede publicar; hay que usar un servicio externo de formularios.
+- **Sin vista previa:** lo que se sube queda visible al instante en el subdominio.
+- **Sin respaldo ni reversión del sitio completo:** la papelera guarda cada archivo reemplazado por separado y restaurar una versión anterior es manual desde cPanel.
+- **No es atómico:** mientras se suben varios archivos el sitio puede verse a medias.
+- Cada archivo respeta `MCP_FILE_MAX_BYTES`.
+
+## Fase 2: publicación guiada (diseño, no implementado)
+
+Lo que **no** existe todavía es una herramienta dedicada que haga lo anterior con garantías. Diseño previsto para publicar una landing estática en un subdominio existente:
 
 1. `stage_landing_page` sube los archivos a una vista previa aleatoria dentro del docroot, sin tocar la raíz pública.
 2. `promote_landing_page` exige confirmación por subdominio y hash, respalda el docroot actual y promueve la vista previa.
 3. `rollback_landing_page` restaura un respaldo concreto.
 
-Reglas previstas: allowlist de directorios de origen, solo archivos estáticos, sin PHP/CGI/symlinks, límites de tamaño, subdominio ya existente, respaldo verificado, confirmación explícita y auditoría de cada paso. Las acciones de alto impacto seguirán desactivadas por defecto.
+Reglas previstas: allowlist de directorios de origen, solo archivos estáticos, sin PHP/CGI/symlinks, límites de tamaño, subdominio ya existente, respaldo verificado, confirmación explícita y auditoría de cada paso. Las acciones de alto impacto seguirán desactivadas por defecto. `publish_landing_page` figura en `allowed_actions.json` con `enabled=false`; si se habilita sin estar implementada, el servidor falla al arrancar.
