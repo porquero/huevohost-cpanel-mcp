@@ -154,7 +154,11 @@ Comprobaciones adicionales:
 
 - [ ] Crear con `overwrite=false` sobre un archivo existente devuelve el error «ya existe» y no lo modifica.
 - [ ] Crear con `overwrite=true` mueve el original a la papelera antes de escribir.
-- [ ] `create_file` rechaza `shell.php` y `.htaccess`.
+- [ ] `create_file` rechaza `shell.php` (el error pide autorización explícita y menciona `allow_php=true`) y `.htaccess`.
+- [ ] Se rechazan también `enviar.php.txt`, `foto.php.jpg`, `enviar.php.` y `enviar.phtml`, **también** con `allow_php=true`.
+- [ ] Con `allow_php=true`, `create_file` de `contacto.php` en un subdirectorio de prueba devuelve `executable: true`; en cPanel el archivo existe. Bórralo después con `delete_file`.
+- [ ] `upload_local_file` de un `enviar.php` de texto con `allow_php=true` se sube; con un PNG renombrado a `.php` se rechaza.
+- [ ] `audit.jsonl` muestra `"allow_php":true` en esa llamada y no contiene el código PHP.
 - [ ] `upload_file` acepta texto con `content` y binario con `content_base64` (solo archivos pequeños, ~5 KB).
 - [ ] `list_local_files` muestra la carpeta `archivos/` y los archivos que dejaste en ella.
 - [ ] `upload_local_file` sube un JPEG real de ~20 KB copiado a `archivos/` (pasando solo el nombre): devuelve `verified: true`, el `sha256` coincide con `Get-FileHash` y `https://TU_SUBDOMINIO/foto.jpg` responde 200 con `content-type: image/jpeg`.

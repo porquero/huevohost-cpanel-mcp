@@ -169,7 +169,7 @@ Deja los archivos de WordPress listos en un directorio vacío de `/public_html` 
 - `directory`: relativo a `/public_html`; debe existir, estar vacío y no ser `/public_html`. Se toleran y conservan sin cambios `.htaccess`, `.user.ini`, `php.ini`, `cgi-bin` y `.well-known`, que el hosting crea en cada subdominio nuevo.
 - `execute=false`: no contacta cPanel ni wordpress.org. `execute=true`: descarga `latest.zip` de wordpress.org en este equipo y verifica su SHA-1 oficial, lo valida, lo sube como un solo archivo, lo extrae en el servidor y envía el zip a la papelera.
 - Devuelve `version`, `site_url` (si el directorio es el de un subdominio), `verified` y `next_steps`.
-- Es la única herramienta que deja archivos PHP en la cuenta, y solo los del paquete oficial verificado. La subida y la extracción usan un timeout de 300 s en lugar de 30 s.
+- Deja archivos PHP solo del paquete oficial verificado (los PHP propios del usuario se suben con `allow_php`, ver más abajo). La subida y la extracción usan un timeout de 300 s en lugar de 30 s.
 
 ### Operaciones de archivos
 
@@ -181,6 +181,16 @@ Todas las herramientas de archivos están confinadas a `public_html`. Aceptan:
 
 Se rechazan rutas absolutas fuera de `/public_html`, componentes `.` o `..`, caracteres de control, nombres con `,` o `;` y cualquier componente que sea un enlace simbólico. Las escrituras comprueban cada directorio existente antes de tocar el archivo.
 
+### Archivos PHP (`allow_php`)
+
+Por defecto **ninguna herramienta escribe `.php`**. Subir uno es una decisión del usuario en el momento de cada subida, y se expresa con el parámetro `allow_php=true` de `create_file`, `upload_file` y `upload_local_file`:
+
+- Claude debe **preguntar** al usuario, avisarle de que el archivo se ejecutará en el servidor y solo entonces repetir la llamada con `allow_php=true`. Nunca debe activarlo por iniciativa propia.
+- Solo se admite un nombre `.php` ordinario (`enviar.php`). Siguen bloqueados `.phtml`, `.phar`, `.php3`–`.php8`, `.cgi`, `.pl`, `.py`, `.sh`, `.htaccess`, `.user.ini`, `php.ini`, `wp-config.php` y los nombres con doble extensión (`enviar.php.txt`, `foto.php.jpg`), que Apache ejecutaría. Esto último vale también sin `allow_php`.
+- Con `upload_local_file` el usuario puede dejar **su propio** `enviar.php` en `archivos/` y subirlo sin que el modelo escriba el código. El archivo debe ser texto y contener `<?php`.
+- La respuesta indica `executable: true` y la auditoría registra `allow_php` (nunca el código).
+- Un script PHP que envía correo y que escribe el modelo debe validar y sanear los campos, rechazar saltos de línea en las cabeceras, llevar un campo trampa anti-spam y enviar solo a la dirección indicada. Revísalo antes de enlazarlo desde una página pública: un formulario mal hecho puede usarse para enviar spam desde tu dominio.
+
 ### `list_files(path="public_html", show_hidden=false)`
 
 Lista archivos y directorios. Devuelve nombre, ruta relativa, tipo, tamaño, fecha de modificación, MIME y permisos. Los enlaces simbólicos se muestran marcados con `symlink: true`, pero no se siguen.
@@ -191,7 +201,7 @@ Descarga el contenido de un archivo de texto (HTML, CSS, JS, JSON, TXT, XML, PHP
 
 ### `create_file(path, content="", overwrite=false)`
 
-Crea un archivo de texto. Si ya existe y `overwrite=false`, falla sin modificar nada. Si `overwrite=true`, primero mueve el original a la papelera de cPanel y después escribe el nuevo contenido. Bloquea extensiones ejecutables o de configuración (`.php`, `.phtml`, `.cgi`, `.pl`, `.py`, `.sh`, `.htaccess`, `.user.ini`, `php.ini`, etc.) y tampoco escribe dentro de `.git`, `.svn`, `.hg` o `.ssh`.
+Crea un archivo de texto. Si ya existe y `overwrite=false`, falla sin modificar nada. Si `overwrite=true`, primero mueve el original a la papelera de cPanel y después escribe el nuevo contenido. Bloquea extensiones ejecutables o de configuración (`.phtml`, `.phar`, `.cgi`, `.pl`, `.py`, `.sh`, `.htaccess`, `.user.ini`, `php.ini`, etc.), las dobles extensiones como `enviar.php.txt`, y los `.php` salvo con `allow_php=true` (ver «Archivos PHP»). Tampoco escribe dentro de `.git`, `.svn`, `.hg` o `.ssh`.
 
 ### `upload_file(path, content=null, content_base64=null, overwrite=false)`
 
@@ -333,7 +343,7 @@ No hace falta la Fase 2 para publicar una landing estática. Se hace combinando 
 
 Límites de este camino:
 
-- **Sin PHP ni CGI.** Las herramientas bloquean `.php`, `.cgi`, `.htaccess`, etc., así que un formulario de contacto que dependa de PHP no se puede publicar; hay que usar un servicio externo de formularios.
+- **PHP solo con autorización explícita.** Un formulario de contacto necesita un `.php`; se sube con `allow_php=true` cuando el usuario lo autoriza en ese momento (ver «Archivos PHP»). CGI, `.htaccess` y el resto de ejecutables siguen bloqueados.
 - **Sin vista previa:** lo que se sube queda visible al instante en el subdominio.
 - **Sin respaldo ni reversión del sitio completo:** la papelera guarda cada archivo reemplazado por separado y restaurar una versión anterior es manual desde cPanel.
 - **No es atómico:** mientras se suben varios archivos el sitio puede verse a medias.

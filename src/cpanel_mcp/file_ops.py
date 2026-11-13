@@ -103,7 +103,42 @@ _BLOCKED_EXTENSIONS = {
     ".rb",
     ".sh",
     ".so",
+    # Otras extensiones que ejecutan código o plantillas en el servidor.
+    ".asp",
+    ".aspx",
+    ".jsp",
+    ".pht",
+    ".phps",
+    ".shtml",
 }
+
+# Extensiones que, como parte INTERMEDIA del nombre, hacen que Apache ejecute
+# el archivo aunque termine en otra extensión (AddHandler): foto.php.jpg.
+_DOUBLE_EXTENSION_SEGMENTS = frozenset(
+    {
+        "cgi",
+        "pht",
+        "phtml",
+        "phar",
+        "php",
+        "php3",
+        "php4",
+        "php5",
+        "php7",
+        "php8",
+        "phps",
+        "pl",
+        "py",
+        "sh",
+        "shtml",
+    }
+)
+
+PHP_EXECUTION_NOTICE = (
+    "Este archivo PHP se ejecutará en el servidor. Revisa su contenido antes de "
+    "enlazarlo desde una página pública; si ya no hace falta, muévelo a la "
+    "papelera con delete_file."
+)
 
 
 def display_path(path: str) -> str:
@@ -231,7 +266,20 @@ def _is_text_file(name: str, mimetype: str | None) -> bool:
     return mime.startswith("text/") or mime in _TEXT_MIME_TYPES
 
 
-def _check_writable_path(path: str, name: str) -> None:
+def _validate_allow_php(value: object) -> bool:
+    if type(value) is not bool:
+        raise ValidationError("allow_php debe ser true o false.")
+    return value
+
+
+def _check_writable_path(path: str, name: str, *, allow_php: bool = False) -> bool:
+    """Valida el destino de una escritura.
+
+    Devuelve ``True`` si es un archivo PHP autorizado con ``allow_php=true`` y
+    ``False`` si es un archivo normal. Lanza ``FileTypeNotAllowedError`` si el
+    nombre puede ejecutar código en el servidor sin autorización.
+    """
+
     components = path.split("/")[1:]
     if any(part.lower() in _SENSITIVE_DIRECTORIES for part in components):
         raise FileTypeNotAllowedError(
@@ -244,13 +292,36 @@ def _check_writable_path(path: str, name: str) -> None:
         raise FileTypeNotAllowedError(
             f"Por seguridad no se puede escribir el archivo '{name}' desde MCP."
         )
-    suffix = "." + lower.rsplit(".", 1)[-1] if "." in lower else ""
+    if lower.endswith(".") or ":" in lower:
+        raise FileTypeNotAllowedError(
+            f"El nombre '{name}' no puede terminar en punto ni contener ':'."
+        )
+
+    parts = lower.split(".")
+    suffix = "." + parts[-1] if len(parts) > 1 else ""
+    stem = ".".join(parts[:-1])
+    if any(part in _DOUBLE_EXTENSION_SEGMENTS for part in parts[1:-1]):
+        raise FileTypeNotAllowedError(
+            f"'{name}' contiene una extensión ejecutable intermedia (como en "
+            "foto.php.jpg) que el servidor ejecutaría. Usa un nombre con una "
+            "sola extensión."
+        )
     if lower in _BLOCKED_EXTENSIONS or suffix in _BLOCKED_EXTENSIONS:
+        if suffix == ".php" and stem:
+            if allow_php:
+                return True
+            raise FileTypeNotAllowedError(
+                f"'{name}' es un archivo PHP y se ejecutaría en el servidor. Solo "
+                "se escribe si el usuario lo autoriza de forma explícita en este "
+                "momento: pregúntaselo, avísale del riesgo y repite la llamada "
+                "con allow_php=true."
+            )
         raise FileTypeNotAllowedError(
             f"La extensión de '{name}' puede ejecutar código o cambiar la "
             "configuración del servidor. Usa archivos estáticos o súbelo "
             "manualmente desde cPanel."
         )
+    return False
 
 
 def _validate_overwrite(value: object) -> bool:
@@ -517,14 +588,16 @@ class FileOperations:
         path: str,
         content: str = "",
         overwrite: bool = False,
+        allow_php: bool = False,
     ) -> dict[str, Any]:
         normalized = normalize_public_path(path, allow_root=False)
         overwrite = _validate_overwrite(overwrite)
+        allow_php = _validate_allow_php(allow_php)
         if not isinstance(content, str):
             raise ValidationError("El contenido del archivo debe ser texto.")
 
         _, name = _parent_and_name(normalized)
-        _check_writable_path(normalized, name)
+        is_php = _check_writable_path(normalized, name, allow_php=allow_php)
 
         encoded = content.encode("utf-8")
         if len(encoded) > self.max_file_bytes:
@@ -569,6 +642,9 @@ class FileOperations:
             "verified": verified,
             "message": "Archivo creado en cPanel.",
         }
+        if is_php:
+            result["executable"] = True
+            result["executable_notice"] = PHP_EXECUTION_NOTICE
         if not verified:
             result["warning"] = (
                 "cPanel aceptó la escritura, pero la verificación inmediata no "
@@ -582,9 +658,11 @@ class FileOperations:
         content: str | None = None,
         content_base64: str | None = None,
         overwrite: bool = False,
+        allow_php: bool = False,
     ) -> dict[str, Any]:
         normalized = normalize_public_path(path, allow_root=False)
         overwrite = _validate_overwrite(overwrite)
+        allow_php = _validate_allow_php(allow_php)
 
         if (content is None) == (content_base64 is None):
             raise ValidationError(
@@ -617,7 +695,7 @@ class FileOperations:
             )
 
         _, name = _parent_and_name(normalized)
-        _check_writable_path(normalized, name)
+        is_php = _check_writable_path(normalized, name, allow_php=allow_php)
 
         parent, _, existing = await self._prepare_write(normalized)
         if existing is not None and not overwrite:
@@ -655,6 +733,9 @@ class FileOperations:
             "verified": verified,
             "message": "Archivo subido a cPanel.",
         }
+        if is_php:
+            result["executable"] = True
+            result["executable_notice"] = PHP_EXECUTION_NOTICE
         if not verified:
             result["warning"] = (
                 "cPanel aceptó la subida, pero la verificación inmediata no "
@@ -703,8 +784,12 @@ class FileOperations:
         local_path: str,
         path: str,
         overwrite: bool = False,
+        allow_php: bool = False,
     ) -> dict[str, Any]:
-        """Sube un archivo binario leído del disco local, sin pasar por el modelo."""
+        """Sube un archivo leído del disco local, sin pasar por el modelo.
+
+        Binarios de la allowlist y, solo con ``allow_php=true``, archivos PHP.
+        """
 
         # Importación diferida: estos módulos importan constantes de este.
         from .binary_types import expected_mime_for, verify_content
@@ -712,9 +797,10 @@ class FileOperations:
 
         normalized = normalize_public_path(path, allow_root=False)
         overwrite = _validate_overwrite(overwrite)
+        allow_php = _validate_allow_php(allow_php)
         _, name = _parent_and_name(normalized)
-        _check_writable_path(normalized, name)
-        expected_mime = expected_mime_for(name)
+        is_php = _check_writable_path(normalized, name, allow_php=allow_php)
+        expected_mime = expected_mime_for(name, allow_php=is_php)
 
         source = resolve_local_file(local_path, self.local_upload_dirs)
         payload = await asyncio.to_thread(
@@ -759,6 +845,9 @@ class FileOperations:
             "verified": verified,
             "message": "Archivo local subido a cPanel.",
         }
+        if is_php:
+            result["executable"] = True
+            result["executable_notice"] = PHP_EXECUTION_NOTICE
         if not verified:
             result["warning"] = (
                 "cPanel aceptó la subida, pero la verificación inmediata no "

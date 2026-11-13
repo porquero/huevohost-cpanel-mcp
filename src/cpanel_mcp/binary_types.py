@@ -30,10 +30,18 @@ _BLOCKED_SEGMENTS = frozenset(
 )
 
 HEAD_BYTES = 16
+PHP_MIME = "application/x-httpd-php"
 
 
-def expected_mime_for(name: str) -> str:
-    """Valida el nombre de destino y devuelve el MIME esperado."""
+def expected_mime_for(name: str, *, allow_php: bool = False) -> str:
+    """Valida el nombre de destino y devuelve el MIME esperado.
+
+    Con ``allow_php=True`` (nombre ya validado por ``_check_writable_path``)
+    se espera un archivo PHP.
+    """
+
+    if allow_php and name.lower().endswith(".php"):
+        return PHP_MIME
 
     segments = name.lower().split(".")
     blocked = [seg for seg in segments[1:] if seg in _BLOCKED_SEGMENTS]
@@ -89,6 +97,14 @@ def sniff_mime(head: bytes) -> str | None:
 
 def verify_content(expected_mime: str, data: bytes) -> str:
     """Comprueba que el contenido real coincida con la extensión de destino."""
+
+    if expected_mime == PHP_MIME:
+        if b"\x00" in data or b"<?" not in data:
+            raise FileTypeNotAllowedError(
+                "El archivo no parece un script PHP (debe ser texto y contener "
+                "una etiqueta '<?php'). No se subió."
+            )
+        return PHP_MIME
 
     actual = sniff_mime(data[:HEAD_BYTES])
     if actual != expected_mime:
